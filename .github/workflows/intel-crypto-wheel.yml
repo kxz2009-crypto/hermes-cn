@@ -61,10 +61,26 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/source" "$RUNNER_TEMP/wheelhouse"
           cd "$RUNNER_TEMP/source"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            "https://raw.githubusercontent.com/NousResearch/hermes-agent/$UPSTREAM_COMMIT/uv.lock" |
+          echo "Fetching pinned upstream commit through Git"
+          mkdir -p "$RUNNER_TEMP/upstream"
+          git -C "$RUNNER_TEMP/upstream" init -q
+          git -C "$RUNNER_TEMP/upstream" remote add origin \
+            https://github.com/NousResearch/hermes-agent.git
+          fetched=0
+          for delay in 0 10 20 40; do
+            if [ "$delay" -gt 0 ]; then sleep "$delay"; fi
+            if git -C "$RUNNER_TEMP/upstream" fetch \
+              --depth=1 origin "$UPSTREAM_COMMIT"; then
+              fetched=1
+              break
+            fi
+          done
+          test "$fetched" -eq 1
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse FETCH_HEAD)" \
+            = "$UPSTREAM_COMMIT"
+          git -C "$RUNNER_TEMP/upstream" show "$UPSTREAM_COMMIT:uv.lock" |
             cat > "$RUNNER_TEMP/source/uv.lock"
+          echo "PASS: upstream lock retrieved from pinned commit"
           metadata=$("$RUNNER_TEMP/build-env/bin/python" -c '
           import pathlib, tomllib
           data = tomllib.loads(pathlib.Path("uv.lock").read_text())
@@ -78,10 +94,21 @@ jobs:
           ')
           read -r source_url source_hash <<< "$metadata"
           test "${#source_hash}" -eq 64
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' \
-            "$source_url" |
-            cat > "$RUNNER_TEMP/source/cryptography-50.0.0.tar.gz"
+          printf 'Downloading cryptography source: %s\n' "$source_url"
+          downloaded=0
+          for delay in 0 10 20 40; do
+            if [ "$delay" -gt 0 ]; then sleep "$delay"; fi
+            if curl --fail --silent --show-error --location \
+              --connect-timeout 15 --max-time 120 \
+              --proto '=https' --proto-redir '=https' \
+              "$source_url" |
+              cat > "$RUNNER_TEMP/source/cryptography-50.0.0.tar.gz"; then
+              downloaded=1
+              break
+            fi
+            echo "Source download failed; retry budget is limited."
+          done
+          test "$downloaded" -eq 1
           printf '%s  cryptography-50.0.0.tar.gz\n' "$source_hash" |
             shasum -a 256 -c -
 
