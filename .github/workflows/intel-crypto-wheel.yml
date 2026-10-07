@@ -150,8 +150,30 @@ jobs:
                   ["otool", "-L", str(module)], text=True
               )
               print(output)
-              for line in output.splitlines()[1:]:
-                  dependency = line.strip().split(" (", 1)[0]
+              identity_output = subprocess.check_output(
+                  ["otool", "-D", str(module)], text=True
+              )
+              identities = [
+                  line.strip()
+                  for line in identity_output.splitlines()[1:]
+                  if line.strip()
+              ]
+              assert len(identities) <= 1, (
+                  f"Unexpected library identities: {identities}"
+              )
+              entries = [
+                  line.strip().split(" (", 1)[0]
+                  for line in output.splitlines()[1:]
+                  if line.strip()
+              ]
+              if identities:
+                  assert entries and entries[0] == identities[0], (
+                      "Library identity does not match first otool -L entry"
+                  )
+                  print(f"Library identity (not an import): {identities[0]}")
+                  entries = entries[1:]
+              assert entries, "No dynamic dependencies found; inspect output"
+              for dependency in entries:
                   assert dependency.startswith(
                       ("/usr/lib/", "/System/Library/")
                   ), f"Non-system dynamic dependency: {dependency}"
