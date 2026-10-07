@@ -1,0 +1,26 @@
+{
+  "time_utc": "2026-10-07T21:22:04.844495+00:00",
+  "test": "SDK connectivity only",
+  "endpoint": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "requested_model": "glm-5.3-flash",
+  "status": "PASS",
+  "returned_model": "glm-5.3-flash",
+  "finish_reason": "stop",
+  "response": "GLM_CONNECTION_OK",
+  "usage": {
+    "completion_tokens": 48,
+    "prompt_tokens": 26,
+    "total_tokens": 74,
+    "completion_tokens_details": {
+      "accepted_prediction_tokens": null,
+      "audio_tokens": null,
+      "reasoning_tokens": 42,
+      "rejected_prediction_tokens": null
+    },
+    "prompt_tokens_details": {
+      "audio_tokens": null,
+      "cached_tokens": 0
+    }
+  },
+  "elapsed_seconds": 4.08
+}
