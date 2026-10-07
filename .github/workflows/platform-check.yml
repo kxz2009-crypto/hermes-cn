@@ -1,0 +1,68 @@
+name: Platform environment check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  environment:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux x86_64
+            runner: ubuntu-24.04
+            expected_os: Linux
+            expected_arch: x86_64
+          - platform: Apple Silicon Mac
+            runner: macos-15
+            expected_os: Darwin
+            expected_arch: arm64
+          - platform: Intel Mac
+            runner: macos-15-intel
+            expected_os: Darwin
+            expected_arch: x86_64
+
+    steps:
+      - name: Verify operating system and architecture
+        shell: bash
+        env:
+          EXPECTED_OS: ${{ matrix.expected_os }}
+          EXPECTED_ARCH: ${{ matrix.expected_arch }}
+          PLATFORM_NAME: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          actual_os=$(uname -s)
+          actual_arch=$(uname -m)
+
+          printf 'OS: %s\nArchitecture: %s\n' "$actual_os" "$actual_arch"
+          test "$actual_os" = "$EXPECTED_OS"
+          test "$actual_arch" = "$EXPECTED_ARCH"
+
+          command -v bash
+          command -v git
+          command -v curl
+          bash --version | head -n 1
+          git --version
+
+          {
+            printf '## %s\n\n' "$PLATFORM_NAME"
+            printf -- '- OS: `%s`\n' "$actual_os"
+            printf -- '- Architecture: `%s`\n' "$actual_arch"
+            printf -- '- Environment check: PASS\n\n'
+            printf 'This checks the CI environment only.\n'
+            printf 'Hermes installation and China-network compatibility are not tested yet.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
