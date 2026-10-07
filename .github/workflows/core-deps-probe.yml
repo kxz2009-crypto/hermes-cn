@@ -225,6 +225,96 @@ jobs:
           print("PASS: core environment encryption and signatures")
           PY
 
+      - name: Install pinned Hermes source in editable mode
+        id: hermes_install
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          unset UV_CONFIG_FILE UV_INDEX UV_INDEX_URL
+          unset UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          unset HERMES_NIX_BUILD
+          export UV_NO_CONFIG=1
+          case "$PROBE_SOURCE" in
+            pypi) index=https://pypi.org/simple ;;
+            tuna) index=https://pypi.tuna.tsinghua.edu.cn/simple ;;
+            *) exit 2 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/hermes-build"
+          cat > "$RUNNER_TEMP/hermes-build/constraints.txt" << 'BUILD'
+          setuptools==83.0.0
+          wheel==0.48.0
+          packaging==26.3
+          BUILD
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          "$uv" pip install \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
+            --default-index "$index" \
+            --build-constraint "$RUNNER_TEMP/hermes-build/constraints.txt" \
+            --no-deps \
+            --editable "$GITHUB_WORKSPACE/upstream"
+          "$uv" pip check \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+      - name: Test Hermes CLI startup
+        id: hermes_cli
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/state"
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/config"
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/cache"
+          export HERMES_HOME="$RUNNER_TEMP/hermes-smoke/state"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/hermes-smoke/config"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/hermes-smoke/cache"
+          export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import importlib.metadata as metadata
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import urllib.parse
+
+          distribution = metadata.distribution("hermes-agent")
+          assert distribution.version == "0.21.5", distribution.version
+          direct = json.loads(distribution.read_text("direct_url.json"))
+          assert direct.get("dir_info", {}).get("editable") is True
+          parsed = urllib.parse.urlparse(direct["url"])
+          assert parsed.scheme == "file"
+          source = pathlib.Path(urllib.parse.unquote(parsed.path)).resolve()
+          expected = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "upstream"
+          assert source == expected.resolve(), (source, expected)
+          print("PASS: pinned source installed in editable mode", flush=True)
+
+          executable = (
+              pathlib.Path(os.environ["UV_PROJECT_ENVIRONMENT"]) / "bin/hermes"
+          )
+          assert executable.is_file(), "Hermes entry point missing"
+          cwd = pathlib.Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke"
+          for argument in ("--help", "--version"):
+              print(f"Running hermes {argument}", flush=True)
+              result = subprocess.run(
+                  [str(executable), argument],
+                  cwd=cwd,
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  timeout=60,
+              )
+              print(result.stdout, flush=True)
+              assert result.returncode == 0, (
+                  f"{argument} exited with {result.returncode}"
+              )
+              assert result.stdout.strip(), f"{argument} produced no output"
+              if argument == "--help":
+                  assert "usage:" in result.stdout.lower(), (
+                      "Expected CLI usage text"
+                  )
+          print("PASS: Hermes help and version startup", flush=True)
+          PY
+
       - name: Check source and lockfile unchanged
         if: always()
         working-directory: upstream
@@ -238,6 +328,8 @@ jobs:
           PROBE_SOURCE: ${{ matrix.source }}
           PROBE_RUNNER: ${{ matrix.runner }}
           DEPS_OUTCOME: ${{ steps.deps.outcome }}
+          HERMES_INSTALL_OUTCOME: ${{ steps.hermes_install.outcome }}
+          HERMES_CLI_OUTCOME: ${{ steps.hermes_cli.outcome }}
         run: |
           {
             printf '## Hash-verified core wheel experiment\n\n'
@@ -253,5 +345,9 @@ jobs:
             printf 'The experimental artifact expires on 2026-10-14; this is not a release channel.\n'
             printf 'uv and Python bootstrap still use upstream services.\n'
             printf 'Index redirects and actual download hosts need separate audit.\n'
-            printf 'Hermes execution and China-network access are not tested.\n'
+            printf -- '- Hermes editable install: %s\n' "$HERMES_INSTALL_OUTCOME"
+            printf -- '- Hermes CLI startup: %s\n' "$HERMES_CLI_OUTCOME"
+            printf 'Build dependencies are version-constrained, not hash-locked yet.\n'
+            printf 'CLI checks cover help and version only.\n'
+            printf 'Model calls, browser tools and China-network access are not tested.\n'
           } >> "$GITHUB_STEP_SUMMARY"
