@@ -1,0 +1,11 @@
+{
+  "time_utc": "2026-10-07T21:29:25.058042+00:00",
+  "test": "Installer-generated hermes-cn CLI",
+  "model": "glm-5.3-flash",
+  "endpoint": "https://open.bigmodel.cn/api/coding/paas/v4",
+  "status": "REVIEW",
+  "exit_code": 0,
+  "expected_response_line_found": true,
+  "output_tail": "  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\n\nsession_id: 20261007_172925_4ba04e\nHERMES_CLI_GLM_OK\n",
+  "elapsed_seconds": 26.5
+}
