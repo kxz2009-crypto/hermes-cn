@@ -107,7 +107,7 @@ git -C "$prefix/source" fetch --depth=1 origin "$commit"
 git -C "$prefix/source" checkout --detach FETCH_HEAD
 [ "$(git -C "$prefix/source" rev-parse HEAD)" = "$commit" ]
 
-"$uv" python install 3.11.17
+"$uv" python install --no-bin 3.11.17
 "$uv" venv --managed-python --python 3.11.17 "$prefix/venv"
 python="$prefix/venv/bin/python"
 
