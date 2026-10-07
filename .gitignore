@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local binary archives; documents are tracked under docs/
+/artifacts/

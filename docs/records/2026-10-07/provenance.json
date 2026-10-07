@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "status": "EXPERIMENTAL",
+  "package": "cryptography",
+  "version": "50.0.0",
+  "filename": "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl",
+  "sha256": "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c",
+  "size_bytes": 3838299,
+  "hermes_upstream_commit": "f97608f178d1ffeca59860195ab7da295f7c8e5f",
+  "source_verification": "cryptography sdist SHA256 checked against pinned Hermes uv.lock",
+  "build_commit": "6577deae4d56be528b49643790cbe91a7b21f16f",
+  "build_run_id": 37679350161,
+  "original_artifact_id": 11507708102,
+  "core_probe_run_id": 37680437611,
+  "cli_probe_run_id": 37681372930,
+  "tested_platform": "macOS 15 x86_64",
+  "tested_python": "3.11.17",
+  "openssl": "3.6.3",
+  "linkage_audit": "cryptography native modules reference only system dynamic libraries",
+  "tests": [
+    "encryption and decryption",
+    "Ed25519 signature verification",
+    "core dependency installation using PyPI and TUNA",
+    "Hermes editable install",
+    "Hermes help and version startup"
+  ],
+  "limitations": [
+    "Not a complete Hermes distribution",
+    "Other macOS and Python versions untested",
+    "Model calls and China-network installation untested",
+    "Build reproducibility not established",
+    "Redistribution license and notice review pending"
+  ]
+}
