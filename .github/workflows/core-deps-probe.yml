@@ -346,6 +346,119 @@ jobs:
           bash "$RUNNER_TEMP/adapter-code/install-lite.sh" "${args[@]}"
           test -s "$RUNNER_TEMP/lite-install/INSTALL_COMPLETE"
 
+      - name: Test installer protection boundaries
+        env:
+          PROBE_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/protection/existing"
+          mkdir -p "$RUNNER_TEMP/protection/old-state"
+          mkdir -p "$RUNNER_TEMP/protection/bad-wheel"
+          echo 'KEEP-EXISTING-DIRECTORY' \
+            > "$RUNNER_TEMP/protection/existing/sentinel.txt"
+          echo 'invalid: [DO-NOT-LOAD-THIS-CONFIG' \
+            > "$RUNNER_TEMP/protection/old-state/config.yaml"
+          echo 'NOT-A-VALID-WHEEL' \
+            > "$RUNNER_TEMP/protection/bad-wheel/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+
+          "$RUNNER_TEMP/lite-install/venv/bin/python" - << 'PY'
+          import hashlib
+          import os
+          import pathlib
+          import subprocess
+
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"]).resolve()
+          base = temp / "protection"
+          installer = temp / "adapter-code/install-lite.sh"
+          uv = temp / "probe-tools/bin/uv"
+
+          def snapshot(directory):
+              result = {}
+              for path in sorted(directory.rglob("*")):
+                  relative = str(path.relative_to(directory))
+                  if path.is_symlink():
+                      result[relative] = ("link", os.readlink(path))
+                  elif path.is_file():
+                      result[relative] = (
+                          "file",
+                          hashlib.sha256(path.read_bytes()).hexdigest(),
+                          path.stat().st_mode,
+                      )
+                  elif path.is_dir():
+                      result[relative] = ("directory", path.stat().st_mode)
+              return result
+
+          def invoke(arguments, env=None):
+              return subprocess.run(
+                  arguments,
+                  cwd=base,
+                  env=env,
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  timeout=60,
+              )
+
+          existing = base / "existing"
+          before = snapshot(existing)
+          result = invoke([
+              "bash", str(installer),
+              "--prefix", str(existing),
+              "--uv", str(uv),
+          ])
+          print(result.stdout)
+          assert result.returncode != 0, "Existing directory was accepted"
+          assert "Installation target already exists" in result.stdout
+          assert snapshot(existing) == before, "Existing directory changed"
+          print("PASS: existing directory rejected and preserved", flush=True)
+
+          if os.environ["PROBE_RUNNER"] == "macos-15-intel":
+              target = base / "must-not-be-created"
+              bad_wheel = base / "bad-wheel" / (
+                  "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+              )
+              assert not target.exists() and not target.is_symlink()
+              result = invoke([
+                  "bash", str(installer),
+                  "--prefix", str(target),
+                  "--uv", str(uv),
+                  "--intel-wheel", str(bad_wheel),
+              ])
+              print(result.stdout)
+              assert result.returncode != 0, "Invalid wheel was accepted"
+              assert "Intel wheel hash mismatch" in result.stdout
+              assert not target.exists() and not target.is_symlink()
+              print("PASS: bad Intel wheel blocked before installation", flush=True)
+          else:
+              print("N/A: Intel wheel guard on non-Intel platform", flush=True)
+
+          old_state = base / "old-state"
+          before = snapshot(old_state)
+          env = os.environ.copy()
+          env["HERMES_HOME"] = str(old_state)
+          root = temp / "lite-install"
+          result = invoke([str(root / "bin/hermes-cn"), "--help"], env)
+          assert result.returncode == 0, result.stdout
+          assert snapshot(old_state) == before, "Inherited state was modified"
+
+          # Help exposes the config path used by --ignore-user-config.
+          # Accept both absolute and HOME-abbreviated display paths.
+          config = root / "state/config.yaml"
+          candidates = [str(config)]
+          try:
+              candidates.append("~/" + str(config.relative_to(pathlib.Path.home())))
+          except ValueError:
+              pass
+          compact_output = "".join(result.stdout.split())
+          assert any(
+              "".join(candidate.split()) in compact_output
+              for candidate in candidates
+          ), "Help did not show the isolated configuration path:\n" + result.stdout
+          assert str(old_state) not in result.stdout
+          print("PASS: launcher selects isolated state; old config preserved", flush=True)
+          PY
+
       - name: Check source and lockfile unchanged
         if: always()
         working-directory: upstream
