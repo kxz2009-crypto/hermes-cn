@@ -1,0 +1,125 @@
+name: Core dependencies probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/core-deps-probe.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: core-deps-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies:
+    name: ${{ matrix.runner }} / ${{ matrix.source }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        runner: [ubuntu-24.04, macos-15, macos-15-intel]
+        source: [pypi, tuna]
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM_COMMIT: f97608f178d1ffeca59860195ab7da295f7c8e5f
+      UV_VERSION: "0.12.23"
+      UV_CACHE_DIR: ${{ runner.temp }}/probe-uv-cache
+      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/probe-python
+      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/probe-venv
+      XDG_CONFIG_HOME: ${{ runner.temp }}/probe-config
+      XDG_CONFIG_DIRS: ${{ runner.temp }}/probe-config
+      PIP_CONFIG_FILE: /dev/null
+      UV_HTTP_TIMEOUT: "60"
+      UV_HTTP_RETRIES: "2"
+
+    steps:
+      - name: Fetch pinned upstream source
+        run: |
+          set -euo pipefail
+          mkdir -p "$XDG_CONFIG_HOME" "$GITHUB_WORKSPACE/upstream"
+          cd "$GITHUB_WORKSPACE/upstream"
+          git init -q
+          git remote add origin https://github.com/NousResearch/hermes-agent.git
+          git fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -s uv.lock
+          test -s pyproject.toml
+
+      - name: Prepare isolated uv and Python
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/probe-tools"
+          "$RUNNER_TEMP/probe-tools/bin/python" -m pip install \
+            --disable-pip-version-check \
+            --index-url https://pypi.org/simple \
+            --only-binary=:all: --no-deps "uv==$UV_VERSION"
+          "$RUNNER_TEMP/probe-tools/bin/uv" --version
+          "$RUNNER_TEMP/probe-tools/bin/uv" python install 3.11
+          "$RUNNER_TEMP/probe-tools/bin/uv" python find \
+            --managed-python 3.11
+
+      - name: Install locked core dependencies
+        id: deps
+        working-directory: upstream
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          unset UV_NO_CONFIG UV_CONFIG_FILE
+          unset UV_INDEX UV_INDEX_URL UV_EXTRA_INDEX_URL
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          case "$PROBE_SOURCE" in
+            pypi)
+              export UV_DEFAULT_INDEX=https://pypi.org/simple
+              ;;
+            tuna)
+              export UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+          printf 'Selected index: %s\n' "$UV_DEFAULT_INDEX"
+          "$RUNNER_TEMP/probe-tools/bin/uv" sync \
+            --locked \
+            --no-default-groups \
+            --no-install-project \
+            --managed-python \
+            --python 3.11 \
+            --verbose
+          "$UV_PROJECT_ENVIRONMENT/bin/python" --version
+          "$RUNNER_TEMP/probe-tools/bin/uv" pip check \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+      - name: Check source and lockfile unchanged
+        if: always()
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          git diff --exit-code HEAD -- pyproject.toml uv.lock
+
+      - name: Write experiment summary
+        if: always()
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+          PROBE_RUNNER: ${{ matrix.runner }}
+          DEPS_OUTCOME: ${{ steps.deps.outcome }}
+        run: |
+          {
+            printf '## Core dependency experiment\n\n'
+            printf -- '- Runner: %s\n' "$PROBE_RUNNER"
+            printf -- '- Index selection: %s\n' "$PROBE_SOURCE"
+            printf -- '- Upstream commit: %s\n' "$UPSTREAM_COMMIT"
+            printf -- '- Dependency step: %s\n\n' "$DEPS_OUTCOME"
+            printf 'uv bootstrap uses PyPI; Python bootstrap uses upstream assets.\n'
+            printf 'Index selection does not prove every download used that host.\n'
+            printf 'Hermes itself, model calls, and China-network access are not tested.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
