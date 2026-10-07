@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/core-deps-probe.yml
+      - scripts/install-lite.sh
   workflow_dispatch:
 
 permissions:
@@ -314,6 +315,36 @@ jobs:
                   )
           print("PASS: Hermes help and version startup", flush=True)
           PY
+
+      - name: Test reusable experimental installer
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+          PROBE_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/adapter-code"
+          git -C "$RUNNER_TEMP/adapter-code" init -q
+          git -C "$RUNNER_TEMP/adapter-code" remote add origin \
+            https://github.com/kxz2009-crypto/hermes-cn.git
+          git -C "$RUNNER_TEMP/adapter-code" fetch --depth=1 origin "$GITHUB_SHA"
+          test "$(git -C "$RUNNER_TEMP/adapter-code" rev-parse FETCH_HEAD)" \
+            = "$GITHUB_SHA"
+          git -C "$RUNNER_TEMP/adapter-code" show \
+            "$GITHUB_SHA:scripts/install-lite.sh" |
+            cat > "$RUNNER_TEMP/adapter-code/install-lite.sh"
+          args=(
+            --prefix "$RUNNER_TEMP/lite-install"
+            --uv "$RUNNER_TEMP/probe-tools/bin/uv"
+            --source "$PROBE_SOURCE"
+          )
+          if [ "$PROBE_RUNNER" = macos-15-intel ]; then
+            args+=(
+              --intel-wheel
+              "$RUNNER_TEMP/intel-wheel/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+            )
+          fi
+          bash "$RUNNER_TEMP/adapter-code/install-lite.sh" "${args[@]}"
+          test -s "$RUNNER_TEMP/lite-install/INSTALL_COMPLETE"
 
       - name: Check source and lockfile unchanged
         if: always()
