@@ -1,0 +1,56 @@
+name: Draft asset read-only access probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify draft asset metadata and download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo=kxz2009-crypto/hermes-cn
+          asset=619728415
+          wheel=cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl
+          mkdir -p "$RUNNER_TEMP/draft-access"
+          cd "$RUNNER_TEMP/draft-access"
+
+          gh api "repos/$repo/releases/assets/$asset" |
+            cat > asset.json
+
+          python3 - << 'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("asset.json").read_text())
+          assert data["id"] == 619728415
+          assert data["name"] == (
+              "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+          )
+          assert data["size"] == 3838299
+          assert data["state"] == "uploaded"
+          print("PASS: asset metadata")
+          PY
+
+          gh api "repos/$repo/releases/assets/$asset" \
+            -H 'Accept: application/octet-stream' |
+            cat > "$wheel"
+
+          echo "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c  $wheel" |
+            sha256sum -c -
+
+          echo "PASS: contents-read GITHUB_TOKEN downloaded the verified asset"
+
+      - name: Record probe scope
+        if: always()
+        shell: bash
+        run: |
+          echo "This probe tests draft asset access with contents: read." >> "$GITHUB_STEP_SUMMARY"
+          echo "No release publication, repository write, or installation is performed." >> "$GITHUB_STEP_SUMMARY"
