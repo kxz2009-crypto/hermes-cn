@@ -68,42 +68,61 @@ jobs:
             --disable-pip-version-check \
             --index-url https://pypi.org/simple \
             --only-binary=:all: --no-deps "uv==$UV_VERSION"
-          "$RUNNER_TEMP/probe-tools/bin/uv" --version
-          "$RUNNER_TEMP/probe-tools/bin/uv" python install 3.11
-          "$RUNNER_TEMP/probe-tools/bin/uv" python find \
-            --managed-python 3.11
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          "$uv" --version
+          "$uv" python install 3.11
+          "$uv" venv --managed-python --python 3.11 \
+            "$UV_PROJECT_ENVIRONMENT"
 
-      - name: Install locked core dependencies
-        id: deps
+      - name: Export core requirements from unchanged upstream lock
         working-directory: upstream
+        run: |
+          set -euo pipefail
+          unset UV_NO_CONFIG UV_CONFIG_FILE
+          unset UV_INDEX UV_INDEX_URL UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          "$RUNNER_TEMP/probe-tools/bin/uv" export \
+            --locked \
+            --format requirements-txt \
+            --no-default-groups \
+            --no-emit-project \
+            --no-header \
+            --no-annotate \
+            --output-file "$RUNNER_TEMP/core-requirements.txt"
+          test -s "$RUNNER_TEMP/core-requirements.txt"
+          grep -q -- '--hash=sha256:' "$RUNNER_TEMP/core-requirements.txt"
+          if grep -nE 'https?://|git\+|file:|^-e |^--.*index|^--find-links' \
+            "$RUNNER_TEMP/core-requirements.txt"; then
+            echo "STOP: exported requirements contain a source override."
+            exit 1
+          fi
+          git diff --exit-code HEAD -- pyproject.toml uv.lock
+
+      - name: Install hash-verified core wheels
+        id: deps
         env:
           PROBE_SOURCE: ${{ matrix.source }}
         run: |
           set -euo pipefail
-          unset UV_NO_CONFIG UV_CONFIG_FILE
-          unset UV_INDEX UV_INDEX_URL UV_EXTRA_INDEX_URL
+          unset UV_CONFIG_FILE UV_INDEX UV_INDEX_URL
+          unset UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
           unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          export UV_NO_CONFIG=1
           case "$PROBE_SOURCE" in
-            pypi)
-              export UV_DEFAULT_INDEX=https://pypi.org/simple
-              ;;
-            tuna)
-              export UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
-              ;;
-            *)
-              exit 2
-              ;;
+            pypi) index=https://pypi.org/simple ;;
+            tuna) index=https://pypi.tuna.tsinghua.edu.cn/simple ;;
+            *) exit 2 ;;
           esac
-          printf 'Selected index: %s\n' "$UV_DEFAULT_INDEX"
-          "$RUNNER_TEMP/probe-tools/bin/uv" sync \
-            --locked \
-            --no-default-groups \
-            --no-install-project \
-            --managed-python \
-            --python 3.11 \
+          cd "$RUNNER_TEMP"
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          printf 'Selected index: %s\n' "$index"
+          "$uv" pip sync "$RUNNER_TEMP/core-requirements.txt" \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
+            --default-index "$index" \
+            --require-hashes \
+            --only-binary=:all: \
             --verbose
-          "$UV_PROJECT_ENVIRONMENT/bin/python" --version
-          "$RUNNER_TEMP/probe-tools/bin/uv" pip check \
+          "$uv" pip check \
             --python "$UV_PROJECT_ENVIRONMENT/bin/python"
 
       - name: Check source and lockfile unchanged
@@ -121,12 +140,14 @@ jobs:
           DEPS_OUTCOME: ${{ steps.deps.outcome }}
         run: |
           {
-            printf '## Core dependency experiment\n\n'
+            printf '## Hash-verified core wheel experiment\n\n'
             printf -- '- Runner: %s\n' "$PROBE_RUNNER"
-            printf -- '- Index selection: %s\n' "$PROBE_SOURCE"
+            printf -- '- Selected index: %s\n' "$PROBE_SOURCE"
             printf -- '- Upstream commit: %s\n' "$UPSTREAM_COMMIT"
-            printf -- '- Dependency step: %s\n\n' "$DEPS_OUTCOME"
-            printf 'uv bootstrap uses PyPI; Python bootstrap uses upstream assets.\n'
-            printf 'Index selection does not prove every download used that host.\n'
-            printf 'Hermes itself, model calls, and China-network access are not tested.\n'
+            printf -- '- Installation outcome: %s\n\n' "$DEPS_OUTCOME"
+            printf 'Export uses the original lock with --locked.\n'
+            printf 'Installation requires hashes and prebuilt wheels.\n'
+            printf 'uv and Python bootstrap still use upstream services.\n'
+            printf 'Index redirects and actual download hosts need separate audit.\n'
+            printf 'Hermes execution and China-network access are not tested.\n'
           } >> "$GITHUB_STEP_SUMMARY"
