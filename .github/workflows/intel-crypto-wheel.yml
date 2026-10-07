@@ -115,6 +115,9 @@ jobs:
       - name: Build static OpenSSL wheel
         run: |
           set -euo pipefail
+          export PATH="$RUNNER_TEMP/build-env/bin:$PATH"
+          test "$(command -v maturin)" = "$RUNNER_TEMP/build-env/bin/maturin"
+          maturin --version
           "$RUNNER_TEMP/build-env/bin/python" -m pip wheel \
             --no-cache-dir --no-deps --no-build-isolation --no-index \
             --wheel-dir "$RUNNER_TEMP/wheelhouse" \
