@@ -7,7 +7,8 @@ on:
       - .github/workflows/core-deps-probe.yml
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  actions: read
 
 concurrency:
   group: core-deps-probe-${{ github.ref }}
@@ -98,6 +99,82 @@ jobs:
           fi
           git diff --exit-code HEAD -- pyproject.toml uv.lock
 
+      - name: Prepare verified Intel wheel overlay
+        if: matrix.runner == 'macos-15-intel'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          repo=kxz2009-crypto/hermes-cn
+          artifact=11507708102
+          wheel=cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl
+          wheel_hash=bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c
+          zip_hash=0ea42d3995d7fd2f3136756545567e156dbfaa060595f8a52cedeac9eaf764ec
+          mkdir -p "$RUNNER_TEMP/intel-wheel"
+          cd "$RUNNER_TEMP/intel-wheel"
+
+          gh api "repos/$repo/actions/artifacts/$artifact" |
+            cat > "$RUNNER_TEMP/intel-wheel/artifact.json"
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import json, pathlib
+          data = json.loads(pathlib.Path("artifact.json").read_text())
+          assert data["id"] == 11507708102
+          assert data["expired"] is False
+          assert data["name"] == "experimental-cryptography-50-macos15-intel"
+          assert data["workflow_run"]["id"] == 37679350161
+          assert data["workflow_run"]["head_sha"] == (
+              "6577deae4d56be528b49643790cbe91a7b21f16f"
+          )
+          assert data["digest"] == (
+              "sha256:0ea42d3995d7fd2f3136756545567e156dbfaa060595f8a52cedeac9eaf764ec"
+          )
+          print("PASS: artifact identity and provenance")
+          PY
+
+          gh api "repos/$repo/actions/artifacts/$artifact/zip" |
+            cat > "$RUNNER_TEMP/intel-wheel/artifact.zip"
+          printf '%s  artifact.zip\n' "$zip_hash" |
+            shasum -a 256 -c -
+
+          unzip -p artifact.zip "$wheel" |
+            cat > "$RUNNER_TEMP/intel-wheel/$wheel"
+          printf '%s  %s\n' "$wheel_hash" "$wheel" |
+            shasum -a 256 -c -
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY' |
+          import os, pathlib, re
+          base = pathlib.Path(os.environ["RUNNER_TEMP"])
+          source = (base / "core-requirements.txt").read_text()
+          pattern = r"(?m)^cryptography==50\.0\.0[^\n]*(?:\n[ \t]+[^\n]*)*"
+          matches = list(re.finditer(pattern, source))
+          assert len(matches) == 1, "Expected exactly one cryptography entry"
+          original = matches[0].group()
+          header = original.splitlines()[0].split("\\", 1)[0].strip()
+          assert header == "cryptography==50.0.0", (
+              "Unexpected version or marker; review before replacing"
+          )
+          assert "--hash=sha256:" in original
+          wheel = base / "intel-wheel" / (
+              "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+          )
+          replacement = (
+              f"cryptography @ {wheel.as_uri()} "
+              "--hash=sha256:"
+              "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c"
+          )
+          result, count = re.subn(pattern, lambda _: replacement, source)
+          assert count == 1
+          print(result, end="")
+          PY
+            cat > "$RUNNER_TEMP/intel-core-requirements.txt"
+
+          test -s "$RUNNER_TEMP/intel-core-requirements.txt"
+          echo "PROBE_REQUIREMENTS=$RUNNER_TEMP/intel-core-requirements.txt" \
+            >> "$GITHUB_ENV"
+          echo "PASS: Intel overlay prepared; original export retained"
+
       - name: Install hash-verified core wheels
         id: deps
         env:
@@ -116,7 +193,8 @@ jobs:
           cd "$RUNNER_TEMP"
           uv="$RUNNER_TEMP/probe-tools/bin/uv"
           printf 'Selected index: %s\n' "$index"
-          "$uv" pip sync "$RUNNER_TEMP/core-requirements.txt" \
+          requirements="${PROBE_REQUIREMENTS:-$RUNNER_TEMP/core-requirements.txt}"
+          "$uv" pip sync "$requirements" \
             --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
             --default-index "$index" \
             --require-hashes \
@@ -124,6 +202,28 @@ jobs:
             --verbose
           "$uv" pip check \
             --python "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+      - name: Test cryptography in complete core environment
+        run: |
+          set -euo pipefail
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import platform
+          import cryptography
+          from cryptography.fernet import Fernet
+          from cryptography.hazmat.backends.openssl.backend import backend
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          assert cryptography.__version__ == "50.0.0"
+          message = b"LocalVRAM core dependencies probe"
+          cipher = Fernet(Fernet.generate_key())
+          assert cipher.decrypt(cipher.encrypt(message)) == message
+          key = Ed25519PrivateKey.generate()
+          key.public_key().verify(key.sign(message), message)
+          print("Platform:", platform.system(), platform.machine())
+          print("cryptography:", cryptography.__version__)
+          print("OpenSSL:", backend.openssl_version_text())
+          print("PASS: core environment encryption and signatures")
+          PY
 
       - name: Check source and lockfile unchanged
         if: always()
@@ -147,6 +247,10 @@ jobs:
             printf -- '- Installation outcome: %s\n\n' "$DEPS_OUTCOME"
             printf 'Export uses the original lock with --locked.\n'
             printf 'Installation requires hashes and prebuilt wheels.\n'
+            printf 'Intel uses a separately hash-pinned custom cryptography wheel.\n'
+            printf 'Intel artifact: 11507708102; build run: 37679350161.\n'
+            printf 'The custom wheel targets macOS 15 x86_64; other OS versions are untested.\n'
+            printf 'The experimental artifact expires on 2026-10-14; this is not a release channel.\n'
             printf 'uv and Python bootstrap still use upstream services.\n'
             printf 'Index redirects and actual download hosts need separate audit.\n'
             printf 'Hermes execution and China-network access are not tested.\n'
