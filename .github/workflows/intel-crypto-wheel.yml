@@ -1,0 +1,161 @@
+name: Intel cryptography wheel experiment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/intel-crypto-wheel.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intel-crypto-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM_COMMIT: f97608f178d1ffeca59860195ab7da295f7c8e5f
+      PIP_CONFIG_FILE: /dev/null
+      PIP_INDEX_URL: https://pypi.org/simple
+      UV_NO_CONFIG: "1"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      OPENSSL_STATIC: "1"
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+    steps:
+      - name: Prepare isolated Python and build tools
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          python3 -m venv "$RUNNER_TEMP/tools"
+          "$RUNNER_TEMP/tools/bin/python" -m pip install \
+            --only-binary=:all: --no-deps uv==0.12.23
+          uv="$RUNNER_TEMP/tools/bin/uv"
+          "$uv" venv --managed-python --python 3.11 --seed \
+            "$RUNNER_TEMP/build-env"
+          "$uv" venv --managed-python --python 3.11 --seed \
+            "$RUNNER_TEMP/test-env"
+          "$RUNNER_TEMP/build-env/bin/python" -m pip install \
+            --only-binary=:all: \
+            setuptools==84.0.0 cffi==2.1.1 maturin==1.15.0
+          openssl_dir=$(brew --prefix openssl@3)
+          test -s "$openssl_dir/lib/libcrypto.a"
+          test -s "$openssl_dir/lib/libssl.a"
+          echo "OPENSSL_DIR=$openssl_dir" >> "$GITHUB_ENV"
+          rustc --version
+          cargo --version
+          clang --version
+          "$openssl_dir/bin/openssl" version
+          "$RUNNER_TEMP/build-env/bin/python" -m pip freeze
+
+      - name: Fetch and verify source against upstream lock
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source" "$RUNNER_TEMP/wheelhouse"
+          cd "$RUNNER_TEMP/source"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            "https://raw.githubusercontent.com/NousResearch/hermes-agent/$UPSTREAM_COMMIT/uv.lock" |
+            cat > "$RUNNER_TEMP/source/uv.lock"
+          metadata=$("$RUNNER_TEMP/build-env/bin/python" -c '
+          import pathlib, tomllib
+          data = tomllib.loads(pathlib.Path("uv.lock").read_text())
+          packages = [p for p in data["package"]
+                      if p["name"] == "cryptography" and p["version"] == "50.0.0"]
+          assert len(packages) == 1, "Unexpected cryptography lock entry"
+          source = packages[0]["sdist"]
+          assert source["url"].startswith("https://files.pythonhosted.org/")
+          assert source["hash"].startswith("sha256:")
+          print(source["url"], source["hash"].split(":", 1)[1])
+          ')
+          read -r source_url source_hash <<< "$metadata"
+          test "${#source_hash}" -eq 64
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            "$source_url" |
+            cat > "$RUNNER_TEMP/source/cryptography-50.0.0.tar.gz"
+          printf '%s  cryptography-50.0.0.tar.gz\n' "$source_hash" |
+            shasum -a 256 -c -
+
+      - name: Build static OpenSSL wheel
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/build-env/bin/python" -m pip wheel \
+            --no-cache-dir --no-deps --no-build-isolation --no-index \
+            --wheel-dir "$RUNNER_TEMP/wheelhouse" \
+            "$RUNNER_TEMP/source/cryptography-50.0.0.tar.gz"
+
+      - name: Install wheel into separate test environment
+        run: |
+          set -euo pipefail
+          wheels=("$RUNNER_TEMP"/wheelhouse/cryptography-*.whl)
+          test "${#wheels[@]}" -eq 1
+          test -f "${wheels[0]}"
+          "$RUNNER_TEMP/test-env/bin/python" -m pip install \
+            --only-binary=:all: cffi==2.0.0 pycparser==3.0
+          "$RUNNER_TEMP/test-env/bin/python" -m pip install \
+            --no-index --no-deps "${wheels[0]}"
+
+      - name: Audit native library dependencies
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/test-env/bin/python" - << 'PY'
+          import pathlib
+          import subprocess
+          import cryptography
+
+          root = pathlib.Path(cryptography.__file__).parent
+          modules = sorted(root.rglob("*.so")) + sorted(root.rglob("*.dylib"))
+          assert modules, "No native modules found"
+          for module in modules:
+              output = subprocess.check_output(
+                  ["otool", "-L", str(module)], text=True
+              )
+              print(output)
+              for line in output.splitlines()[1:]:
+                  dependency = line.strip().split(" (", 1)[0]
+                  assert dependency.startswith(
+                      ("/usr/lib/", "/System/Library/")
+                  ), f"Non-system dynamic dependency: {dependency}"
+          print("PASS: native modules reference only system dynamic libraries")
+          PY
+
+      - name: Test encryption and signatures
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/test-env/bin/python" - << 'PY'
+          import cryptography
+          from cryptography.fernet import Fernet
+          from cryptography.hazmat.backends.openssl.backend import backend
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          assert cryptography.__version__ == "50.0.0"
+          message = b"LocalVRAM Intel wheel experiment"
+          cipher = Fernet(Fernet.generate_key())
+          assert cipher.decrypt(cipher.encrypt(message)) == message
+          private_key = Ed25519PrivateKey.generate()
+          private_key.public_key().verify(private_key.sign(message), message)
+          print("cryptography:", cryptography.__version__)
+          print("OpenSSL:", backend.openssl_version_text())
+          print("PASS: encryption, decryption and signature verification")
+          PY
+          "$RUNNER_TEMP/test-env/bin/python" -m pip check
+          cd "$RUNNER_TEMP/wheelhouse"
+          shasum -a 256 *.whl | cat > "$RUNNER_TEMP/wheelhouse/SHA256SUMS"
+          cat "$RUNNER_TEMP/wheelhouse/SHA256SUMS"
+
+      - name: Save experimental wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-cryptography-50-macos15-intel
+          path: ${{ runner.temp }}/wheelhouse/
+          if-no-files-found: error
+          retention-days: 7
