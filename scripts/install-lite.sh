@@ -214,6 +214,13 @@ base=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 unset PYTHONPATH PYTHONHOME
 export HERMES_HOME="$base/state"
 export PATH="$base/venv/bin:$PATH"
+
+# Pinned installation: version output must not wait for update checks.
+if [ "$#" -eq 1 ] && [ "$1" = --version ]; then
+  exec "$base/venv/bin/python" -I -c \
+    'from hermes_cli._startup_fast import print_fast_version_info; print_fast_version_info(check_updates=False)'
+fi
+
 exec "$base/venv/bin/hermes" "$@"
 LAUNCH
 chmod 700 "$prefix/bin/hermes-cn"
