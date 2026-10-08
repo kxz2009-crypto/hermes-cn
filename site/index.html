@@ -4,136 +4,57 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>LocalVRAM · Hermes 实验安装入口</title>
+<title>LocalVRAM · Hermes 多模型实验安装入口</title>
 <style>
-:root{color-scheme:light}
 *{box-sizing:border-box}
 body{margin:0;background:#f5f8fc;color:#182b45;font:16px/1.8 system-ui,sans-serif}
-main{max-width:980px;margin:auto;padding:48px 24px}
-h1{font-size:clamp(28px,5vw,44px);line-height:1.25;margin:16px 0}
-h2{font-size:23px;margin-top:0}
+main{max-width:960px;margin:auto;padding:48px 22px}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.3}
+h2{font-size:23px}
+.card{background:white;border:1px solid #dce5ef;border-radius:16px;padding:24px;margin:22px 0}
 a{color:#145db1;text-underline-offset:3px}
-.card{background:#fff;border:1px solid #dce5ef;border-radius:16px;padding:26px;margin:22px 0}
-.badge{display:inline-block;background:#e4efff;color:#145db1;padding:3px 12px;border-radius:20px}
-pre{background:#11233c;color:#edf5ff;padding:20px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.65}
-code{font-family:ui-monospace,monospace}
-table{width:100%;border-collapse:collapse}
-td,th{text-align:left;padding:10px;border-bottom:1px solid #e5ebf2}
+.button{display:inline-block;background:#145db1;color:white;padding:12px 22px;border-radius:10px;text-decoration:none}
 .small,footer{font-size:14px;color:#52647a}
-footer{margin-top:32px}
 </style>
 </head>
 <body><main>
-<span class="badge">一期实验预览</span>
-<h1>在独立目录安装 Hermes</h1>
-<p>固定版本、清华源依赖、独立状态目录。从命令行开始体验。</p>
+<p>LocalVRAM · 社区实验版本</p>
+<h1>在独立目录安装 Hermes，选择自己的模型</h1>
+<p>Windows / WSL、Mac 和 Linux 安装说明；密钥隐藏输入，模型配置独立保存。</p>
 
 <section class="card">
-<h2>支持范围与验证状态</h2>
-<table>
-<thead><tr><th>平台</th><th>当前证据</th></tr></thead>
-<tbody>
-<tr><td>Linux x86_64 / WSL2</td><td>Ubuntu 24.04 CI；WSL 安装及 GLM 简短对话实测</td></tr>
-<tr><td>macOS 15 · Apple Silicon</td><td>PyPI / TUNA 安装及 CLI 启动 CI</td></tr>
-<tr><td>macOS 15 · Intel</td><td>r2 wheel、安装与保护测试；公开分发包自动下载、安装及声明留存专项 CI 通过</td></tr>
-</tbody></table>
-<p class="small">Windows 请在 WSL2 内运行。其他 macOS 版本暂不支持。
-GitHub runner 测试不等于所有实体设备或国内网络验证。</p>
+<h2>从安装指南开始</h2>
+<p>按顺序完成：检查电脑 → 准备终端 → 安装 → 配置模型 → 开始聊天。</p>
+<p><a class="button" href="/guide.html">打开 Windows / Mac / Linux 安装指南</a></p>
+<p class="small">新指南使用独立 r3 目录。已有 r2 安装保留，不自动迁移密钥、记忆或会话。</p>
 </section>
 
 <section class="card">
-<h2>1. 准备安装工具</h2>
-<p>需要 Bash、Git、Python 3（含 venv）；Intel 自动下载还需要
-curl、unzip 和 shasum。以下命令创建独立 uv 工具环境，
-已有目标目录会停止执行。</p>
-<pre><code>bash &lt;&lt; 'SETUP'
-set -euo pipefail
-umask 077
-tools="$HOME/.local/share/hermes-cn-tools-0.12.23"
-[ ! -e "$tools" ] &amp;&amp; [ ! -L "$tools" ]
-mkdir -p "$(dirname "$tools")"
-python3 -m venv "$tools"
-(
-  unset PYTHONPATH PYTHONHOME
-  unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL PIP_FIND_LINKS
-  unset PIP_NO_INDEX PIP_TARGET PIP_PREFIX PIP_USER
-  export PIP_CONFIG_FILE=/dev/null
-  "$tools/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --index-url https://pypi.tuna.tsinghua.edu.cn/simple --only-binary=:all: --no-deps 'uv==0.12.23'
-)
-"$tools/bin/uv" --version
-SETUP</code></pre>
-<p class="small">若系统缺少 venv，请先按操作系统文档安装相应组件。
-工具自举固定版本，但此步骤尚未采用完整哈希锁定。</p>
-</section>
-
-<section class="card">
-<h2>2. 获取固定安装器并安装</h2>
-<p>安装目标必须不存在，路径不能含空白。源码和 Python 下载仍需访问上游服务。</p>
-<pre><code>bash &lt;&lt; 'INSTALL'
-set -euo pipefail
-umask 077
-adapter="$HOME/.local/share/hermes-cn-adapter-r2"
-prefix="$HOME/.local/share/hermes-cn-lite-r2"
-commit=247f8dfc57b7a0a3a219ab7ee3968b3ca8f9e64f
-[ ! -e "$adapter" ] &amp;&amp; [ ! -L "$adapter" ]
-[ ! -e "$prefix" ] &amp;&amp; [ ! -L "$prefix" ]
-mkdir -p "$(dirname "$adapter")"
-git init -q "$adapter"
-git -C "$adapter" remote add origin https://github.com/kxz2009-crypto/hermes-cn.git
-git -C "$adapter" fetch --depth=1 origin "$commit"
-git -C "$adapter" checkout --detach FETCH_HEAD
-[ "$(git -C "$adapter" rev-parse HEAD)" = "$commit" ]
-bash "$adapter/scripts/install-lite.sh" --prefix "$prefix" --uv "$HOME/.local/share/hermes-cn-tools-0.12.23/bin/uv" --source tuna
-INSTALL</code></pre>
-<p>完成后运行：</p>
-<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-cn" --help
-"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-cn" --version</code></pre>
-<p class="small">Intel 默认下载固定哈希校验的 r2 分发包，
-声明及来源保留在安装目录/work/intel-bundle/。
-也可通过 --intel-wheel 指定对应本地 wheel，并保留随包声明。</p>
-</section>
-
-<section class="card">
-<h2>使用前须知</h2>
+<h2>建议安装门槛</h2>
 <ul>
-<li>当前提供核心 CLI，模型服务需要自行配置账号和密钥；不要向本站提交密钥。</li>
-<li>实测包含国内 GLM Coding Plan 的一次 WSL CLI 简短对话，不代表所有模型和工具可用。</li>
-<li>状态文件位于安装目录的 state；目录隔离不等于操作系统沙箱。</li>
-<li>不自动安装后台服务、不添加全局 PATH；浏览器及可选组件未纳入验收。</li>
-<li>失败时保留现场；暂不支持原地升级或复用失败目录。安装目录不可直接搬迁。</li>
-<li>请勿运行 hermes update 改变本实验固定版本。</li>
+<li>Windows：Windows 11 x64、4 核 CPU、16 GB 内存，WSL2 + Ubuntu 24.04。</li>
+<li>Apple Silicon Mac：macOS 15、M1 或更新芯片、16 GB 内存。</li>
+<li>Intel Mac：macOS 15、4 核 Intel CPU、16 GB 内存。</li>
+<li>Linux：Ubuntu 24.04 x86_64、4 核 CPU、16 GB 内存。</li>
+<li>至少 20 GB 可用 SSD 空间，推荐预留 40 GB；云端模型无需独立显卡。</li>
 </ul>
+<p class="small">这是本项目的建议门槛，不是官方最低配置或性能实测结论。Mac 当前仅允许 macOS 15。</p>
 </section>
 
 <section class="card">
-<h2>配置国内 GLM Coding Plan</h2>
-<p>安装完成后运行以下命令。setup 会隐藏输入 API Key，
-仅保存到本次安装的独立状态目录；已有凭据不会被覆盖。</p>
-<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" setup
-"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" status</code></pre>
-<p>status 仅检查本地配置，不发送请求。
-需要验证服务时，再运行 check；该操作可能消耗套餐额度。</p>
-<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" check</code></pre>
-<p>检查成功后开始对话：</p>
-<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" chat</code></pre>
-<p class="small">默认使用国内 Coding Plan 接口和 glm-5.3-flash。
-遇到 429，请检查套餐额度和并发情况，避免连续重试。
-对话启用 safe-mode，但不等于禁用所有工具。
-本入口不会自动升级已有安装；请勿删除已有目录强行重装。</p>
-<p class="small">配置流程和六组安装 CI 已通过。
-北京服务器真实对话仍记录为 HTTP 429 未通过；
-其他电脑无代理首次安装待验证。</p>
+<h2>多模型配置</h2>
+<p>GLM Coding Plan、DeepSeek Flash / Pro、Kimi Coding Plan、豆包、Qwen、MiniMax、MiMo、腾讯 HY3 和 Custom。</p>
+<p>可配置、选择、查看状态和执行连接检查。豆包模型 ID、MiniMax 接口及模型需按本人控制台填写。</p>
+<p class="small">本版统一入口使用 OpenAI Chat Completions 兼容接口。API Key 与套餐需自行准备；check/chat 可能消耗额度。</p>
 </section>
 
 <section class="card">
-<h2>下载与验证记录</h2>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/releases/tag/deps-cryptography-50.0.0-macos15-intel-r2">Intel r2 分发包及声明</a></p>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37735784997">六组 CI 与 Intel 自动下载验收结果</a></p>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/tree/247f8dfc57b7a0a3a219ab7ee3968b3ca8f9e64f/docs">固定安装器版本文档及历史记录</a></p>
-<p class="small">依赖资产为实验预发布。第三方声明材料不代表完整链接组件清单，
-也不构成完整合规认证。一期实验安装入口验收通过；无代理首次安装及更多产品功能仍在验证。</p>
+<h2>验证记录</h2>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933">六组安装、终端配置及离线路由 CI</a></p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/tree/8a84537b9d513a8b03f97fb6d0a17815910b15ec/docs">固定安装器版本文档</a></p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/releases/tag/deps-cryptography-50.0.0-macos15-intel-r2">Intel 依赖分发包及声明材料</a></p>
+<p class="small">路由测试使用假密钥，不代表各家真实认证、对话及工具调用均通过。当前未覆盖全部实体设备或中国大陆无代理网络。</p>
 </section>
 
-<footer>LocalVRAM 是独立的社区适配与服务项目，与 Nous Research 无隶属关系，
-亦未获得其背书。</footer>
+<footer>LocalVRAM 是独立社区适配项目，与 Nous Research 无隶属关系，亦未获得其背书。当前提供实验体验，不承诺生产支持。</footer>
 </main></body></html>

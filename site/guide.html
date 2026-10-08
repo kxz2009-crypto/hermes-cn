@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Hermes 多模型安装指南 · LocalVRAM</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f8fc;color:#182b45;font:16px/1.85 system-ui,sans-serif}
+main{max-width:960px;margin:auto;padding:28px 22px 70px}
+h1{font-size:32px;line-height:1.35}h2{margin-top:42px;color:#145db1}
+pre{padding:20px;background:#11233c;color:#edf5ff;border-radius:12px;overflow:auto}
+code{font:13px/1.65 ui-monospace,monospace}a{color:#145db1}
+li{margin:8px 0}p{overflow-wrap:anywhere}
+</style></head><body><main><a href="/">返回首页</a>
+<h1>LocalVRAM · Hermes 多模型安装指南</h1>
+<p>本项目是独立社区适配项目，与 Nous Research 无隶属关系，亦未获得其背书。</p>
+<h2>1. 建议安装门槛</h2>
+<p>以下为本项目主动提高的配置门槛，不是 Hermes 官方最低配置，也不是性能测试结论。</p>
+<ul>
+<li>Windows：Windows 11 x64、4 核 CPU、16 GB 内存、WSL2 + Ubuntu 24.04、至少 20 GB 可用 SSD 空间。</li>
+<li>Apple Silicon Mac：macOS 15、M1 或更新芯片、16 GB 内存、至少 20 GB 可用 SSD 空间。</li>
+<li>Intel Mac：macOS 15、4 核 Intel CPU、16 GB 内存、至少 20 GB 可用 SSD 空间。</li>
+<li>Linux：Ubuntu 24.04 x86_64、4 核 CPU、16 GB 内存、至少 20 GB 可用 SSD 空间。</li>
+<li>更推荐：Windows、Intel Mac、Linux 使用 32 GB 内存；Apple Silicon 使用 24 GB 或以上内存；预留 40 GB 磁盘空间。</li>
+<li>Windows 需启用 CPU 虚拟化，建议 WSL 可用内存至少 8 GB。</li>
+<li>安装前关闭不必要的大型程序，建议保留至少 4 GB 可用内存。</li>
+<li>使用本机 SSD 用户目录，避免网络盘、移动硬盘和云盘同步目录；安装路径不能包含空白字符。</li>
+<li>本版调用云端模型，不要求独立显卡或 CUDA。本地模型需要另行评估硬件。</li>
+<li>当前不支持 Windows 原生安装、Windows ARM、Linux ARM；Mac 当前仅允许 macOS 15。</li>
+</ul>
+<p>安装器尚未强制检查全部硬件门槛。配置达标不等于网络和所有可选功能均可用。</p>
+<h2>2. Windows：准备 Ubuntu</h2>
+<p>已安装 WSL 的用户在 PowerShell 检查，不必重复安装：</p>
+<pre><code>wsl -l -v
+</code></pre>
+<p>确认 Ubuntu 24.04 的 VERSION 为 2。</p>
+<p>尚未安装的用户，在管理员 PowerShell 中执行：</p>
+<pre><code>wsl --install -d Ubuntu-24.04
+</code></pre>
+<p>按提示重启并完成 Ubuntu 用户名、密码设置。</p>
+<p>输入 Linux 密码时不显示字符，这是正常现象。</p>
+<p>从开始菜单打开 Ubuntu，准备工具：</p>
+<pre><code>cd ~
+sudo apt-get update
+sudo apt-get install -y git curl python3 python3-venv ca-certificates
+</code></pre>
+<p>后续 Bash 命令均在 Ubuntu 中运行，不在 PowerShell 或 CMD 中运行。</p>
+<p>Hermes 安装使用普通用户，不使用 sudo，也不要从 Windows/System32 目录开始。</p>
+<h2>3. Mac：准备终端</h2>
+<p>通过苹果菜单“关于本机”确认系统版本、芯片和内存。</p>
+<p>当前仅允许 macOS 15，不是“15 及以上”。</p>
+<p>按 Command + 空格搜索“终端”。Apple Silicon 使用原生终端，不启用“使用 Rosetta 打开”。</p>
+<pre><code>sw_vers -productVersion
+uname -m
+git --version
+python3 --version
+curl --version
+command -v unzip
+command -v shasum
+python3 -c &#x27;import venv, ensurepip, ssl; print(&quot;Python 准备条件通过&quot;)&#x27;
+</code></pre>
+<p>Apple Silicon 原生架构显示 arm64；Intel Mac 显示 x86_64。</p>
+<p>若 Apple Silicon 显示 x86_64，先检查 Rosetta 设置。</p>
+<p>Git 如提示安装 Apple 命令行工具，先完成安装。</p>
+<p>缺少 Python 或模块检查失败时，先从 Python 官网安装适合本机架构的 Python 3.11 或更新版本：</p>
+<p><a href="https://www.python.org/downloads/macos/">https://www.python.org/downloads/macos/</a></p>
+<p>Hermes 自身运行时由安装器另行固定为 Python 3.11.17。</p>
+<p>Mac 不运行 wsl，不使用 sudo 执行 Hermes 安装。</p>
+<h2>4. 网络与账号</h2>
+<p>安装仍需访问 GitHub、Python 下载服务及依赖源；清华源不覆盖全部下载。</p>
+<p>Intel Mac 还需要下载 GitHub Release 依赖包。</p>
+<p>模型需要对应 API Key 和可用额度；网页会员不一定包含 API 权限。</p>
+<p>普通 API、Coding Plan 和不同地区接口的密钥不能随意混用。</p>
+<p>遇到 EOF 或超时，保留错误输出，不关闭证书验证，不反复删除安装目录。</p>
+<p>当前尚未完成全部中国大陆无代理网络的安装验证。</p>
+<h2>5. 安装多模型版</h2>
+<p>Windows 用户在 Ubuntu 内运行；Mac 用户在终端运行；Linux 用户在普通用户终端运行。</p>
+<p>一次复制完整代码框，不复制用户名、命令提示符或运行结果。</p>
+<p>本指南使用新的 r3 目录，保留旧 r2 安装，不自动迁移旧密钥、记忆或会话。</p>
+<p>第一次安装失败后，目录存在会阻止重复安装；保留错误输出，不要直接删除目录。</p>
+<p>下面的命令会安装独立工具、固定版本 Hermes 及依赖，但不会申请 API Key 或请求模型。</p>
+<pre><code>bash &lt;&lt; &#x27;INSTALL&#x27;
+set -euo pipefail
+umask 077
+
+tools=&quot;$HOME/.local/share/hermes-cn-tools-r3&quot;
+adapter=&quot;$HOME/.local/share/hermes-cn-adapter-r3&quot;
+prefix=&quot;$HOME/.local/share/hermes-cn-lite-r3&quot;
+commit=8a84537b9d513a8b03f97fb6d0a17815910b15ec
+
+[ &quot;$(id -u)&quot; -ne 0 ] || {
+  echo &#x27;请使用普通用户安装，不要使用 root 或 sudo。&#x27;
+  exit 1
+}
+
+case &quot;$HOME&quot; in
+  *[[:space:]]*)
+    echo &#x27;主目录包含空白字符，请停止并寻求帮助。&#x27;
+    exit 1
+    ;;
+esac
+
+case &quot;$(uname -s)/$(uname -m)&quot; in
+  Linux/x86_64) ;;
+  Darwin/arm64|Darwin/x86_64)
+    [ &quot;$(sw_vers -productVersion | cut -d . -f 1)&quot; = 15 ] || {
+      echo &#x27;本版仅允许 macOS 15。&#x27;
+      exit 1
+    }
+    [ &quot;$(sysctl -in sysctl.proc_translated 2&gt;/dev/null || true)&quot; != 1 ] || {
+      echo &#x27;请使用非 Rosetta 的原生终端。&#x27;
+      exit 1
+    }
+    ;;
+  *)
+    echo &#x27;当前平台不在本版支持范围。&#x27;
+    exit 1
+    ;;
+esac
+
+for tool in git curl python3; do
+  command -v &quot;$tool&quot; &gt;/dev/null || {
+    echo &quot;缺少工具：$tool，请先完成准备步骤。&quot;
+    exit 1
+  }
+done
+git --version
+python3 -c &#x27;import venv, ensurepip, ssl&#x27;
+
+if [ &quot;$(uname -s)/$(uname -m)&quot; = Darwin/x86_64 ]; then
+  command -v unzip &gt;/dev/null
+  command -v shasum &gt;/dev/null
+fi
+
+for path in &quot;$tools&quot; &quot;$adapter&quot; &quot;$prefix&quot;; do
+  if [ -e &quot;$path&quot; ] || [ -L &quot;$path&quot; ]; then
+    printf &#x27;目录已存在，请保留现场，不要重复安装：%s\n&#x27; &quot;$path&quot;
+    exit 1
+  fi
+done
+
+mkdir -p &quot;$HOME/.local/share&quot;
+
+printf &#x27;\n===== 1. 准备独立安装工具 =====\n&#x27;
+python3 -m venv &quot;$tools&quot;
+&quot;$tools/bin/python&quot; -m pip --isolated install \
+  --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+  &#x27;uv==0.12.23&#x27;
+
+printf &#x27;\n===== 2. 获取固定安装器 =====\n&#x27;
+mkdir -p &quot;$adapter&quot;
+git -C &quot;$adapter&quot; init -q
+git -C &quot;$adapter&quot; remote add origin \
+  https://github.com/kxz2009-crypto/hermes-cn.git
+git -C &quot;$adapter&quot; fetch --depth=1 origin &quot;$commit&quot;
+git -C &quot;$adapter&quot; checkout --detach FETCH_HEAD
+[ &quot;$(git -C &quot;$adapter&quot; rev-parse HEAD)&quot; = &quot;$commit&quot; ]
+
+printf &#x27;\n===== 3. 安装 Hermes =====\n&#x27;
+bash &quot;$adapter/scripts/install-lite.sh&quot; \
+  --prefix &quot;$prefix&quot; \
+  --uv &quot;$tools/bin/uv&quot; \
+  --source tuna
+
+[ &quot;$(cat &quot;$prefix/INSTALL_COMPLETE&quot;)&quot; = experimental-lite-0.1 ]
+&quot;$prefix/bin/hermes-cn&quot; --version
+&quot;$prefix/bin/hermes-cn&quot; model list
+printf &#x27;\n安装完成。下一步配置模型 API Key。\n&#x27;
+INSTALL
+</code></pre>
+<p>安装成功时，可以看到版本信息、模型列表和“安装完成”。</p>
+<p>如果出现 fatal、Traceback 或下载失败，请保留最后的错误信息，不要继续执行模型配置。</p>
+<h2>6. 第一次配置模型：以 DeepSeek 为例</h2>
+<p>安装完成后运行：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model setup deepseek
+</code></pre>
+<ul>
+<li>Base URL：直接回车，保留预设地址。</li>
+<li>模型 ID：直接回车，保留 deepseek-flash。</li>
+<li>API Key：粘贴自己申请的 DeepSeek API Key，再回车。</li>
+<li>密钥输入时不显示字符或星号，这是正常现象。不要把密钥贴到聊天、截图或问题反馈中。</li>
+</ul>
+<p>选择配置，再检查本地状态：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model use deepseek
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model status
+</code></pre>
+<p>status 不发送请求，不代表密钥有效或账户有额度。</p>
+<p>真实对话检查使用下面的命令，可能消耗额度，最长等待约 120 秒：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model check
+</code></pre>
+<p>结果出现 &quot;status&quot;: &quot;PASS&quot;，表示本次对话检查通过。</p>
+<p>如果失败，先处理错误提示，不要反复执行安装。</p>
+<h2>7. 配置其他模型</h2>
+<p>查看预设：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model list
+</code></pre>
+<ul>
+<li>glm：GLM Coding Plan，默认 glm-5.3-flash。</li>
+<li>deepseek：DeepSeek 普通 API，默认 deepseek-flash。</li>
+<li>deepseek-pro：DeepSeek 普通 API，默认 deepseek-v4-pro。</li>
+<li>kimi：Kimi Coding Plan，默认 k3；需有对应模型权限，不是普通 Moonshot API。</li>
+<li>doubao：火山方舟普通 API；模型 ID 按自己的控制台填写。</li>
+<li>qwen：百炼北京区普通 API，默认 qwen-plus；不是百炼 Coding Plan。</li>
+<li>minimax：按自己的控制台填写 OpenAI 兼容 Base URL、模型 ID 和密钥。</li>
+<li>mimo：小米 MiMo，默认 mimo-v2.5-pro。</li>
+<li>hy3：腾讯 TokenHub，默认 hy3，使用 TokenHub 对应密钥。</li>
+<li>custom：自己填写 HTTPS Base URL、模型 ID、API Key。</li>
+</ul>
+<p>预设与配置入口不等于各家真实模型均通过验收。</p>
+<p>填写时确认接口、地区、套餐及密钥相匹配。服务商模型和套餐可能变化，以本人控制台为准。</p>
+<p>例如配置 Kimi Coding Plan：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model setup kimi
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model use kimi
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model status
+</code></pre>
+<p>Kimi 需填写 Kimi Coding Plan 的密钥；模型提示可按套餐权限修改。</p>
+<p>其他模型同理，将 setup 和 use 后面的名称替换为相应预设名称。</p>
+<p>例如配置自定义服务：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model setup custom
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model use custom
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model status
+</code></pre>
+<p>Custom 本版只支持 OpenAI Chat Completions 兼容协议。</p>
+<p>填写服务商提供的 Base URL，例如 https://example.com/v1；不要额外加 /chat/completions。</p>
+<p>不要使用仅支持 Anthropic Messages 或 Responses 的地址，也不要将密钥放入 URL。</p>
+<p>上面的 example.com 只是格式示例，不是可用模型服务。</p>
+<p>已有配置拒绝覆盖。更换密钥时可以创建新名称：</p>
+<pre><code>&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model setup deepseek deepseek-new
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; model use deepseek-new
+</code></pre>
+<p>每个配置的密钥、会话、记忆和状态独立，切换后不会自动继承另一配置的历史。</p>
+<p>use 影响随后新启动的聊天，不改变正在运行的会话。</p>
+<p>配置文件保存在安装目录的 state/models 下，包含密钥；不要上传或分享这些文件。</p>
+<h2>8. 每天如何开始聊天</h2>
+<p>Windows 打开 Ubuntu；Mac 打开终端。运行：</p>
+<pre><code>mkdir -p &quot;$HOME/hermes-work&quot;
+cd &quot;$HOME/hermes-work&quot;
+&quot;$HOME/.local/share/hermes-cn-lite-r3/bin/hermes-cn&quot; chat
+</code></pre>
+<p>可先输入：你好，请用中文介绍你能帮我做什么。</p>
+<p>想切换模型时，先退出当前聊天，在终端执行 model use，再重新运行 chat。</p>
+<p>本版统一 chat 入口不接受附加命令参数。</p>
+<p>建议先在专用工作目录里熟悉操作，不要直接从重要资料目录开始。</p>
+<p>safe-mode 不等于禁用所有工具，也不是操作系统沙箱。</p>
+<h2>9. 常见提示与处理</h2>
+<ul>
+<li>Initializing agent、Reasoning：初始化或思考过程，等待最终回答。</li>
+<li>输入框中的英文示例：占位提示，不是必须执行的任务。</li>
+<li>Web search、Browser、tirith 提示：对应可选功能状态，不等于文字对话失败。</li>
+<li>落后若干提交或提示 hermes update：上游更新提醒。固定版本暂不要自行执行上游更新。</li>
+<li>401：检查密钥及接口是否匹配。</li>
+<li>402：检查余额或付款状态。</li>
+<li>403：检查账号、套餐、模型或接口权限。</li>
+<li>429：检查请求频率、并发和套餐额度；重新安装通常不能解决。</li>
+<li>配置已存在：拒绝覆盖。可检查已有配置，或用不同名称建立新配置。</li>
+<li>权限 600 提示：凭据文件权限不符合要求，不要通过公开文件内容来排查。</li>
+<li>目录已存在：安装器保护已有目录。保留现场，不要直接删除或强行覆盖。</li>
+<li>EOF、连接超时：保留错误文字及发生步骤，排查网络，不关闭证书验证。</li>
+</ul>
+<p>反馈问题时提供操作系统、芯片类型、安装版本、失败步骤及错误文字。</p>
+<p>不要提供 API Key、凭据文件、账号密码或含敏感资料的完整日志。</p>
+<h2>10. 当前验证范围</h2>
+<p>固定安装器：8a84537b9d513a8b03f97fb6d0a17815910b15ec。</p>
+<p>六组 CI：</p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933">https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933</a></p>
+<p>Ubuntu 24.04、macOS 15 Apple Silicon、macOS 15 Intel 各有 PyPI/TUNA 两组测试。</p>
+<p>覆盖安装回归、多模型路由及终端配置。</p>
+<p>路由测试使用假密钥，不代表各家真实认证、回复及工具调用通过。</p>
+<p>此前另一台 Windows/WSL 电脑的 GLM 专用入口有安装和真实对话成功记录。</p>
+<p>本版统一多模型入口仍需分别进行真实服务验证。</p>
+<p>尚不承诺全部中国大陆无代理网络、所有实体设备或全部可选功能通过。</p>
+<p>参考：</p>
+<p><a href="https://learn.microsoft.com/en-us/windows/wsl/install">https://learn.microsoft.com/en-us/windows/wsl/install</a></p>
+<p><a href="https://www.python.org/downloads/macos/">https://www.python.org/downloads/macos/</a></p>
+</main></body></html>
