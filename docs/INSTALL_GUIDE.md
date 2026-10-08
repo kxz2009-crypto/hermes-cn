@@ -1,6 +1,6 @@
 # LocalVRAM · Hermes 多模型安装指南
 
-下载说明：本版 Hermes 主源码从 LocalVRAM 腾讯云下载，完整下载后校验固定 SHA256；连接中断时进行有限重试。安装工具、Python 和部分依赖仍需访问其他下载服务。
+下载说明：支持国内网络下载安装，已完成 Windows／WSL 实机安装及 DeepSeek 对话验证。
 
 本项目是独立社区适配项目，与 Nous Research 无隶属关系，亦未获得其背书。
 
@@ -80,12 +80,12 @@ Mac 不运行 wsl，不使用 sudo 执行 Hermes 安装。
 
 ## 4. 网络与账号
 
-安装仍需访问 GitHub、Python 下载服务及依赖源；清华源不覆盖全部下载。
-Intel Mac 还需要下载 GitHub Release 依赖包。
+安装需要保持网络连接。下载失败时，请保留错误输出和安装目录。
+Intel Mac 所需专用依赖包由安装器自动下载并校验。
 模型需要对应 API Key 和可用额度；网页会员不一定包含 API 权限。
 普通 API、Coding Plan 和不同地区接口的密钥不能随意混用。
 遇到 EOF 或超时，保留错误输出，不关闭证书验证，不反复删除安装目录。
-当前尚未完成全部中国大陆无代理网络的安装验证。
+当前尚未完成全部中国大陆网络的安装验证。
 
 ## 5. 安装多模型版
 
@@ -105,7 +105,7 @@ umask 077
 tools="$HOME/.local/share/hermes-cn-tools-r3"
 adapter="$HOME/.local/share/hermes-cn-adapter-r3"
 prefix="$HOME/.local/share/hermes-cn-lite-r3"
-commit=7b7215b89e9b3e55b879e2cf4e97b48a50bc4321
+commit=386147344dee20b2921da4afb40c188d6beda499
 
 [ "$(id -u)" -ne 0 ] || {
   echo '请使用普通用户安装，不要使用 root 或 sudo。'
@@ -168,15 +168,42 @@ python3 -m venv "$tools"
 
 printf '\n===== 2. 获取固定安装器 =====\n'
 mkdir -p "$adapter"
-git -C "$adapter" init -q
-git -C "$adapter" remote add origin \
-  https://github.com/kxz2009-crypto/hermes-cn.git
-git -C "$adapter" fetch --depth=1 origin "$commit"
-git -C "$adapter" checkout --detach FETCH_HEAD
-[ "$(git -C "$adapter" rev-parse HEAD)" = "$commit" ]
+installer_url="https://hermes.localvram.cn/downloads/installers/$commit/install-lite.sh"
+installer_hash=8315f40752f0149e5e1d8b97f3926153d49a16189f3f362c047b559ca35152d7
+
+downloaded=0
+for attempt in 1 2 3; do
+  printf '安装器下载尝试：%s/3\n' "$attempt"
+  if curl -q --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' \
+    --connect-timeout 15 --max-time 90 --retry 0 \
+    "$installer_url" |
+    cat > "$adapter/install-lite.sh"; then
+    downloaded=1
+    break
+  fi
+  if [ "$attempt" -lt 3 ]; then sleep 3; fi
+done
+
+[ "$downloaded" -eq 1 ] || {
+  echo '安装器下载失败，请保留错误输出和安装目录。'
+  exit 1
+}
+
+python3 - "$adapter/install-lite.sh" "$installer_hash" << 'VERIFY_INSTALLER'
+import hashlib
+from pathlib import Path
+import sys
+actual = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+if actual != sys.argv[2]:
+    sys.exit("停止：安装器校验不通过，未执行。")
+print("PASS：固定安装器 SHA256 校验")
+VERIFY_INSTALLER
+
+bash -n "$adapter/install-lite.sh"
 
 printf '\n===== 3. 安装 Hermes =====\n'
-bash "$adapter/scripts/install-lite.sh" \
+bash "$adapter/install-lite.sh" \
   --prefix "$prefix" \
   --uv "$tools/bin/uv" \
   --source tuna
@@ -317,10 +344,10 @@ safe-mode 不等于禁用所有工具，也不是操作系统沙箱。
 
 ## 10. 当前验证范围
 
-固定安装器：7b7215b89e9b3e55b879e2cf4e97b48a50bc4321。
+固定安装器：386147344dee20b2921da4afb40c188d6beda499。
 
 六组 CI：
-https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37817079088
+https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37827091899
 
 Ubuntu 24.04、macOS 15 Apple Silicon、macOS 15 Intel 各有 PyPI/TUNA 两组测试。
 覆盖安装回归、多模型路由及终端配置。
@@ -328,7 +355,7 @@ Ubuntu 24.04、macOS 15 Apple Silicon、macOS 15 Intel 各有 PyPI/TUNA 两组�
 
 此前另一台 Windows/WSL 电脑的 GLM 专用入口有安装和真实对话成功记录。
 本版统一多模型入口仍需分别进行真实服务验证。
-尚不承诺全部中国大陆无代理网络、所有实体设备或全部可选功能通过。
+尚不承诺全部中国大陆网络、所有实体设备或全部可选功能通过。
 
 参考：
 https://learn.microsoft.com/en-us/windows/wsl/install
