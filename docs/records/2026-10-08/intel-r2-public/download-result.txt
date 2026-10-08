@@ -1,0 +1,4 @@
+PASS: anonymous HTTPS bundle download
+PASS: bundle hash matches previously committed checksum
+PASS: wheel hash and accompanying notices
+Scope: this WSL network; not all mainland-China networks
