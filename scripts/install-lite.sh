@@ -211,7 +211,8 @@ cat > "$prefix/bin/hermes-cn" << 'LAUNCH'
 #!/usr/bin/env bash
 set -euo pipefail
 base=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-unset PYTHONPATH PYTHONHOME
+unset PYTHONPATH PYTHONHOME HERMES_LAZY_INSTALL_TARGET
+export HERMES_DISABLE_LAZY_INSTALLS=1
 export HERMES_HOME="$base/state"
 export PATH="$base/venv/bin:$PATH"
 
