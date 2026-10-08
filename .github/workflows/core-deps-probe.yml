@@ -455,6 +455,70 @@ jobs:
           print("PASS: launcher selects isolated state; old config preserved", flush=True)
           PY
 
+      - name: Test Intel automatic bundle download
+        if: matrix.runner == 'macos-15-intel'
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          installer="$RUNNER_TEMP/adapter-code/install-lite.sh"
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          prefix="$RUNNER_TEMP/lite-auto-download"
+
+          test -s "$installer"
+          test -x "$uv"
+          test ! -e "$prefix"
+          test ! -L "$prefix"
+
+          # 不传 --intel-wheel，实际进入安装器自动下载分支。
+          bash "$installer" \
+            --prefix "$prefix" \
+            --uv "$uv" \
+            --source "$PROBE_SOURCE"
+
+          test "$(cat "$prefix/INSTALL_COMPLETE")" = experimental-lite-0.1
+          test "$(cat "$prefix/UPSTREAM_COMMIT")" = \
+            f97608f178d1ffeca59860195ab7da295f7c8e5f
+
+          bundle_dir="$prefix/work/intel-bundle"
+          for name in \
+            cryptography-50.0.0-macos15-intel-r2-bundle.zip \
+            cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl \
+            build-inputs.json toolchain.txt INTEGRATION_ACCEPTANCE.md \
+            THIRD_PARTY_NOTICES.draft.txt SHA256SUMS README.txt
+          do
+            test -s "$bundle_dir/$name"
+          done
+
+          (
+            cd "$bundle_dir"
+            shasum -a 256 -c SHA256SUMS
+          )
+
+          "$prefix/venv/bin/python" - "$prefix" << 'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+          import cryptography
+
+          root = pathlib.Path(sys.argv[1])
+          bundle = root / "work/intel-bundle"
+          wheel_name = "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+          expected = "11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f"
+          for wheel in (bundle / wheel_name, root / "wheels" / wheel_name):
+              assert hashlib.sha256(wheel.read_bytes()).hexdigest() == expected
+          assert cryptography.__version__ == "50.0.0"
+          provenance = json.loads((bundle / "build-inputs.json").read_text())
+          assert str(provenance["run_id"]) == "37719594029"
+          assert provenance["workflow_commit"] == (
+              "1b3d7ea78cdc8f86150028c7a31959fee6e56005"
+          )
+          assert (bundle / "THIRD_PARTY_NOTICES.draft.txt").stat().st_size == 380706
+          print("PASS: automatic Intel download, installation and retained notices")
+          PY
+
       - name: Check source and lockfile unchanged
         if: always()
         working-directory: upstream
