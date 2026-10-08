@@ -11,7 +11,8 @@ h1{font-size:32px;line-height:1.35}h2{margin-top:42px;color:#145db1}
 pre{padding:20px;background:#11233c;color:#edf5ff;border-radius:12px;overflow:auto}
 code{font:13px/1.65 ui-monospace,monospace}a{color:#145db1}
 li{margin:8px 0}p{overflow-wrap:anywhere}
-</style></head><body><main><a href="/">返回首页</a>
+</style></head><body><main>
+<p>下载说明：本版 Hermes 主源码从 LocalVRAM 腾讯云下载，完整下载后校验固定 SHA256；连接中断时进行有限重试。安装工具、Python 和部分依赖仍需访问其他下载服务。</p><a href="/">返回首页</a>
 <h1>LocalVRAM · Hermes 多模型安装指南</h1>
 <p>本项目是独立社区适配项目，与 Nous Research 无隶属关系，亦未获得其背书。</p>
 <h2>1. 建议安装门槛</h2>
@@ -86,7 +87,7 @@ umask 077
 tools=&quot;$HOME/.local/share/hermes-cn-tools-r3&quot;
 adapter=&quot;$HOME/.local/share/hermes-cn-adapter-r3&quot;
 prefix=&quot;$HOME/.local/share/hermes-cn-lite-r3&quot;
-commit=8a84537b9d513a8b03f97fb6d0a17815910b15ec
+commit=7b7215b89e9b3e55b879e2cf4e97b48a50bc4321
 
 [ &quot;$(id -u)&quot; -ne 0 ] || {
   echo &#x27;请使用普通用户安装，不要使用 root 或 sudo。&#x27;
@@ -260,9 +261,9 @@ cd &quot;$HOME/hermes-work&quot;
 <p>反馈问题时提供操作系统、芯片类型、安装版本、失败步骤及错误文字。</p>
 <p>不要提供 API Key、凭据文件、账号密码或含敏感资料的完整日志。</p>
 <h2>10. 当前验证范围</h2>
-<p>固定安装器：8a84537b9d513a8b03f97fb6d0a17815910b15ec。</p>
+<p>固定安装器：7b7215b89e9b3e55b879e2cf4e97b48a50bc4321。</p>
 <p>六组 CI：</p>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933">https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933</a></p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37817079088">https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37817079088</a></p>
 <p>Ubuntu 24.04、macOS 15 Apple Silicon、macOS 15 Intel 各有 PyPI/TUNA 两组测试。</p>
 <p>覆盖安装回归、多模型路由及终端配置。</p>
 <p>路由测试使用假密钥，不代表各家真实认证、回复及工具调用通过。</p>

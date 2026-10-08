@@ -1,5 +1,7 @@
 # LocalVRAM · Hermes 多模型安装指南
 
+下载说明：本版 Hermes 主源码从 LocalVRAM 腾讯云下载，完整下载后校验固定 SHA256；连接中断时进行有限重试。安装工具、Python 和部分依赖仍需访问其他下载服务。
+
 本项目是独立社区适配项目，与 Nous Research 无隶属关系，亦未获得其背书。
 
 ## 1. 建议安装门槛
@@ -103,7 +105,7 @@ umask 077
 tools="$HOME/.local/share/hermes-cn-tools-r3"
 adapter="$HOME/.local/share/hermes-cn-adapter-r3"
 prefix="$HOME/.local/share/hermes-cn-lite-r3"
-commit=8a84537b9d513a8b03f97fb6d0a17815910b15ec
+commit=7b7215b89e9b3e55b879e2cf4e97b48a50bc4321
 
 [ "$(id -u)" -ne 0 ] || {
   echo '请使用普通用户安装，不要使用 root 或 sudo。'
@@ -315,10 +317,10 @@ safe-mode 不等于禁用所有工具，也不是操作系统沙箱。
 
 ## 10. 当前验证范围
 
-固定安装器：8a84537b9d513a8b03f97fb6d0a17815910b15ec。
+固定安装器：7b7215b89e9b3e55b879e2cf4e97b48a50bc4321。
 
 六组 CI：
-https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37751007933
+https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37817079088
 
 Ubuntu 24.04、macOS 15 Apple Silicon、macOS 15 Intel 各有 PyPI/TUNA 两组测试。
 覆盖安装回归、多模型路由及终端配置。
