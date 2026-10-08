@@ -102,47 +102,43 @@ jobs:
 
       - name: Prepare verified Intel wheel overlay
         if: matrix.runner == 'macos-15-intel'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(uname -m)" = x86_64
-          repo=kxz2009-crypto/hermes-cn
-          artifact=11524969260
-          wheel=cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl
-          wheel_hash=11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f
-          zip_hash=5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7
-          mkdir -p "$RUNNER_TEMP/intel-wheel"
-          cd "$RUNNER_TEMP/intel-wheel"
+          bundle_dir="$RUNNER_TEMP/intel-wheel"
+          mkdir -p "$bundle_dir"
+          bundle_name=cryptography-50.0.0-macos15-intel-r2-bundle.zip
+          bundle_url="https://github.com/kxz2009-crypto/hermes-cn/releases/download/deps-cryptography-50.0.0-macos15-intel-r2/$bundle_name"
 
-          gh api "repos/$repo/actions/artifacts/$artifact" |
-            cat > "$RUNNER_TEMP/intel-wheel/artifact.json"
+          curl -q --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --connect-timeout 15 --max-time 300 \
+            --retry 3 --retry-delay 5 \
+            "$bundle_url" |
+            cat > "$bundle_dir/$bundle_name"
 
-          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
-          import json, pathlib
-          data = json.loads(pathlib.Path("artifact.json").read_text())
-          assert data["id"] == 11524969260
-          assert data["expired"] is False
-          assert data["name"] == "experimental-cryptography-50-macos15-intel-provenance"
-          assert data["workflow_run"]["id"] == 37719594029
-          assert data["workflow_run"]["head_sha"] == (
-              "1b3d7ea78cdc8f86150028c7a31959fee6e56005"
+          (
+            cd "$bundle_dir"
+            echo '6f751a5ace4892baabb292f357e9c8a587e11960e6d22634d37611565e6cde96  cryptography-50.0.0-macos15-intel-r2-bundle.zip' |
+              shasum -a 256 -c -
           )
-          assert data["digest"] == (
-              "sha256:5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7"
+
+          # ZIP 整体校验通过后，只读取明确列出的文件，不执行通用解压。
+          for bundled_file in \
+            cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl \
+            build-inputs.json toolchain.txt INTEGRATION_ACCEPTANCE.md \
+            THIRD_PARTY_NOTICES.draft.txt SHA256SUMS README.txt
+          do
+            unzip -p "$bundle_dir/$bundle_name" "$bundled_file" |
+              cat > "$bundle_dir/$bundled_file"
+            test -s "$bundle_dir/$bundled_file"
+          done
+
+          (
+            cd "$bundle_dir"
+            echo '11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f  cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl' |
+              shasum -a 256 -c -
           )
-          print("PASS: artifact identity and provenance")
-          PY
-
-          gh api "repos/$repo/actions/artifacts/$artifact/zip" |
-            cat > "$RUNNER_TEMP/intel-wheel/artifact.zip"
-          printf '%s  artifact.zip\n' "$zip_hash" |
-            shasum -a 256 -c -
-
-          unzip -p artifact.zip "$wheel" |
-            cat > "$RUNNER_TEMP/intel-wheel/$wheel"
-          printf '%s  %s\n' "$wheel_hash" "$wheel" |
-            shasum -a 256 -c -
 
           "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY' |
           import os, pathlib, re
@@ -484,9 +480,9 @@ jobs:
             printf 'Export uses the original lock with --locked.\n'
             printf 'Installation requires hashes and prebuilt wheels.\n'
             printf 'Intel uses a separately hash-pinned custom cryptography wheel.\n'
-            printf 'Intel artifact: 11524969260; build run: 37719594029.\n'
+            printf 'Intel source: public r2 Release bundle; build run: 37719594029.\n'
             printf 'The custom wheel targets macOS 15 x86_64; other OS versions are untested.\n'
-            printf 'The experimental artifact expires on 2026-10-14; this is not a release channel.\n'
+            printf 'The r2 dependency is an experimental prerelease; download uses a pinned bundle hash.\n'
             printf 'uv and Python bootstrap still use upstream services.\n'
             printf 'Index redirects and actual download hosts need separate audit.\n'
             printf -- '- Hermes editable install: %s\n' "$HERMES_INSTALL_OUTCOME"

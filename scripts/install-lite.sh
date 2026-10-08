@@ -62,8 +62,8 @@ if [ "$os" = Darwin ]; then
   [ "${mac_version%%.*}" = 15 ] ||
     fail 'This experimental release is limited to macOS 15'
 fi
-if [ "$os/$arch" = Darwin/x86_64 ]; then
-  [ -f "$intel_wheel" ] || fail '--intel-wheel is required on Intel Mac'
+if [ "$os/$arch" = Darwin/x86_64 ] && [ -n "$intel_wheel" ]; then
+  [ -f "$intel_wheel" ] || fail 'Local Intel wheel not found'
   case "$intel_wheel" in
     /*/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl) ;;
     *) fail 'Unexpected Intel wheel path or filename' ;;
@@ -79,6 +79,12 @@ case "$source_name" in
   pypi) index=https://pypi.org/simple ;;
   *) fail 'Source must be tuna or pypi' ;;
 esac
+
+if [ "$os/$arch" = Darwin/x86_64 ] && [ -z "$intel_wheel" ]; then
+  command -v curl >/dev/null || fail 'curl is required for Intel bundle download'
+  command -v unzip >/dev/null || fail 'unzip is required for Intel bundle download'
+  command -v shasum >/dev/null || fail 'shasum is required for Intel bundle verification'
+fi
 
 # All installer-managed data is kept under the requested new directory.
 mkdir -p "$prefix"
@@ -110,6 +116,44 @@ git -C "$prefix/source" checkout --detach FETCH_HEAD
 "$uv" python install --no-bin 3.11.17
 "$uv" venv --managed-python --python 3.11.17 "$prefix/venv"
 python="$prefix/venv/bin/python"
+
+if [ "$os/$arch" = Darwin/x86_64 ] && [ -z "$intel_wheel" ]; then
+  bundle_dir="$prefix/work/intel-bundle"
+  mkdir -p "$bundle_dir"
+  bundle_name=cryptography-50.0.0-macos15-intel-r2-bundle.zip
+  bundle_url="https://github.com/kxz2009-crypto/hermes-cn/releases/download/deps-cryptography-50.0.0-macos15-intel-r2/$bundle_name"
+
+  curl -q --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' \
+    --connect-timeout 15 --max-time 300 \
+    --retry 3 --retry-delay 5 \
+    "$bundle_url" |
+    cat > "$bundle_dir/$bundle_name"
+
+  (
+    cd "$bundle_dir"
+    echo '6f751a5ace4892baabb292f357e9c8a587e11960e6d22634d37611565e6cde96  cryptography-50.0.0-macos15-intel-r2-bundle.zip' |
+      shasum -a 256 -c -
+  )
+
+  # ZIP 整体校验通过后，只读取明确列出的文件，不执行通用解压。
+  for bundled_file in \
+    cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl \
+    build-inputs.json toolchain.txt INTEGRATION_ACCEPTANCE.md \
+    THIRD_PARTY_NOTICES.draft.txt SHA256SUMS README.txt
+  do
+    unzip -p "$bundle_dir/$bundle_name" "$bundled_file" |
+      cat > "$bundle_dir/$bundled_file"
+    test -s "$bundle_dir/$bundled_file"
+  done
+
+  (
+    cd "$bundle_dir"
+    echo '11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f  cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl' |
+      shasum -a 256 -c -
+  )
+  intel_wheel="$bundle_dir/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+fi
 
 (
   cd "$prefix/source"
