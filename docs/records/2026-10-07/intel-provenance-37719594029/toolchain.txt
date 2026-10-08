@@ -1,0 +1,33 @@
+ProductName:		macOS
+ProductVersion:		15.7.9
+BuildVersion:		24G830
+Homebrew 6.0.18
+Homebrew/homebrew-core (git revision a18de1aa60a; last commit 2026-08-24)
+Homebrew/homebrew-cask (git revision 012c48f6314; last commit 2026-08-24)
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+binary: rustc
+commit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea
+commit-date: 2026-08-18
+host: x86_64-apple-darwin
+release: 1.98.0
+LLVM version: 22.1.8
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+Apple clang version 17.0.0 (clang-1700.0.13.5)
+Target: x86_64-apple-darwin24.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+15.5
+OpenSSL 3.6.3 9 Jun 2026 (Library: OpenSSL 3.6.3 9 Jun 2026)
+built on: Tue Jun  9 11:46:57 2026 UTC
+platform: darwin64-x86_64-cc
+options:  bn(64,64)
+compiler: clang -fPIC -arch x86_64 -O3 -Wall -DL_ENDIAN -DOPENSSL_PIC -D_REENTRANT -DOPENSSL_BUILDING_OPENSSL -DNDEBUG
+OPENSSLDIR: "/usr/local/etc/openssl@3"
+ENGINESDIR: "/usr/local/Cellar/openssl@3/3.6.3/lib/engines-3"
+MODULESDIR: "/usr/local/Cellar/openssl@3/3.6.3/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: OPENSSL_ia32cap=0xfefa7237cf8bffff:0x00000000029c6fbf:0x0000000000000000:0x0000000000000000:0x0000000000000000
+cffi==2.1.1
+maturin==1.15.0
+packaging==26.3
+pycparser==3.0
