@@ -1,0 +1,503 @@
+name: Intel candidate integration probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+
+concurrency:
+  group: intel-candidate-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependencies:
+    name: ${{ matrix.runner }} / ${{ matrix.source }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        runner: [macos-15-intel]
+        source: [pypi, tuna]
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM_COMMIT: f97608f178d1ffeca59860195ab7da295f7c8e5f
+      UV_VERSION: "0.12.23"
+      PIP_CONFIG_FILE: /dev/null
+      UV_HTTP_TIMEOUT: "60"
+      UV_HTTP_RETRIES: "2"
+
+    steps:
+      - name: Set isolated runtime paths
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/probe-config"
+          {
+            echo "UV_CACHE_DIR=$RUNNER_TEMP/probe-uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$RUNNER_TEMP/probe-python"
+            echo "UV_PROJECT_ENVIRONMENT=$RUNNER_TEMP/probe-venv"
+            echo "XDG_CONFIG_HOME=$RUNNER_TEMP/probe-config"
+            echo "XDG_CONFIG_DIRS=$RUNNER_TEMP/probe-config"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch pinned upstream source
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/upstream"
+          cd "$GITHUB_WORKSPACE/upstream"
+          git init -q
+          git remote add origin https://github.com/NousResearch/hermes-agent.git
+          git fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -s uv.lock
+          test -s pyproject.toml
+
+      - name: Prepare isolated uv and Python
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/probe-tools"
+          "$RUNNER_TEMP/probe-tools/bin/python" -m pip install \
+            --disable-pip-version-check \
+            --index-url https://pypi.org/simple \
+            --only-binary=:all: --no-deps "uv==$UV_VERSION"
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          "$uv" --version
+          "$uv" python install 3.11
+          "$uv" venv --managed-python --python 3.11 \
+            "$UV_PROJECT_ENVIRONMENT"
+
+      - name: Export core requirements from unchanged upstream lock
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          unset UV_NO_CONFIG UV_CONFIG_FILE
+          unset UV_INDEX UV_INDEX_URL UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          "$RUNNER_TEMP/probe-tools/bin/uv" export \
+            --locked \
+            --format requirements-txt \
+            --no-default-groups \
+            --no-emit-project \
+            --no-header \
+            --no-annotate \
+            --output-file "$RUNNER_TEMP/core-requirements.txt"
+          test -s "$RUNNER_TEMP/core-requirements.txt"
+          grep -q -- '--hash=sha256:' "$RUNNER_TEMP/core-requirements.txt"
+          if grep -nE 'https?://|git\+|file:|^-e |^--.*index|^--find-links' \
+            "$RUNNER_TEMP/core-requirements.txt"; then
+            echo "STOP: exported requirements contain a source override."
+            exit 1
+          fi
+          git diff --exit-code HEAD -- pyproject.toml uv.lock
+
+      - name: Prepare verified Intel wheel overlay
+        if: matrix.runner == 'macos-15-intel'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          repo=kxz2009-crypto/hermes-cn
+          artifact=11524969260
+          wheel=cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl
+          wheel_hash=11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f
+          zip_hash=5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7
+          mkdir -p "$RUNNER_TEMP/intel-wheel"
+          cd "$RUNNER_TEMP/intel-wheel"
+
+          gh api "repos/$repo/actions/artifacts/$artifact" |
+            cat > "$RUNNER_TEMP/intel-wheel/artifact.json"
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import json, pathlib
+          data = json.loads(pathlib.Path("artifact.json").read_text())
+          assert data["id"] == 11524969260
+          assert data["expired"] is False
+          assert data["name"] == "experimental-cryptography-50-macos15-intel-provenance"
+          assert data["workflow_run"]["id"] == 37719594029
+          assert data["workflow_run"]["head_sha"] == (
+              "1b3d7ea78cdc8f86150028c7a31959fee6e56005"
+          )
+          assert data["digest"] == (
+              "sha256:5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7"
+          )
+          print("PASS: artifact identity and provenance")
+          PY
+
+          gh api "repos/$repo/actions/artifacts/$artifact/zip" |
+            cat > "$RUNNER_TEMP/intel-wheel/artifact.zip"
+          printf '%s  artifact.zip\n' "$zip_hash" |
+            shasum -a 256 -c -
+
+          unzip -p artifact.zip "$wheel" |
+            cat > "$RUNNER_TEMP/intel-wheel/$wheel"
+          printf '%s  %s\n' "$wheel_hash" "$wheel" |
+            shasum -a 256 -c -
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY' |
+          import os, pathlib, re
+          base = pathlib.Path(os.environ["RUNNER_TEMP"])
+          source = (base / "core-requirements.txt").read_text()
+          pattern = r"(?m)^cryptography==50\.0\.0[^\n]*(?:\n[ \t]+[^\n]*)*"
+          matches = list(re.finditer(pattern, source))
+          assert len(matches) == 1, "Expected exactly one cryptography entry"
+          original = matches[0].group()
+          header = original.splitlines()[0].split("\\", 1)[0].strip()
+          assert header == "cryptography==50.0.0", (
+              "Unexpected version or marker; review before replacing"
+          )
+          assert "--hash=sha256:" in original
+          wheel = base / "intel-wheel" / (
+              "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+          )
+          replacement = (
+              f"cryptography @ {wheel.as_uri()} "
+              "--hash=sha256:"
+              "11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f"
+          )
+          result, count = re.subn(pattern, lambda _: replacement, source)
+          assert count == 1
+          print(result, end="")
+          PY
+            cat > "$RUNNER_TEMP/intel-core-requirements.txt"
+
+          test -s "$RUNNER_TEMP/intel-core-requirements.txt"
+          echo "PROBE_REQUIREMENTS=$RUNNER_TEMP/intel-core-requirements.txt" \
+            >> "$GITHUB_ENV"
+          echo "PASS: Intel overlay prepared; original export retained"
+
+      - name: Install hash-verified core wheels
+        id: deps
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          unset UV_CONFIG_FILE UV_INDEX UV_INDEX_URL
+          unset UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          export UV_NO_CONFIG=1
+          case "$PROBE_SOURCE" in
+            pypi) index=https://pypi.org/simple ;;
+            tuna) index=https://pypi.tuna.tsinghua.edu.cn/simple ;;
+            *) exit 2 ;;
+          esac
+          cd "$RUNNER_TEMP"
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          printf 'Selected index: %s\n' "$index"
+          requirements="${PROBE_REQUIREMENTS:-$RUNNER_TEMP/core-requirements.txt}"
+          "$uv" pip sync "$requirements" \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
+            --default-index "$index" \
+            --require-hashes \
+            --only-binary=:all: \
+            --verbose
+          "$uv" pip check \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+      - name: Test cryptography in complete core environment
+        run: |
+          set -euo pipefail
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import platform
+          import cryptography
+          from cryptography.fernet import Fernet
+          from cryptography.hazmat.backends.openssl.backend import backend
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          assert cryptography.__version__ == "50.0.0"
+          message = b"LocalVRAM core dependencies probe"
+          cipher = Fernet(Fernet.generate_key())
+          assert cipher.decrypt(cipher.encrypt(message)) == message
+          key = Ed25519PrivateKey.generate()
+          key.public_key().verify(key.sign(message), message)
+          print("Platform:", platform.system(), platform.machine())
+          print("cryptography:", cryptography.__version__)
+          print("OpenSSL:", backend.openssl_version_text())
+          print("PASS: core environment encryption and signatures")
+          PY
+
+      - name: Install pinned Hermes source in editable mode
+        id: hermes_install
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          unset UV_CONFIG_FILE UV_INDEX UV_INDEX_URL
+          unset UV_EXTRA_INDEX_URL UV_DEFAULT_INDEX
+          unset PIP_INDEX_URL PIP_EXTRA_INDEX_URL
+          unset HERMES_NIX_BUILD
+          export UV_NO_CONFIG=1
+          case "$PROBE_SOURCE" in
+            pypi) index=https://pypi.org/simple ;;
+            tuna) index=https://pypi.tuna.tsinghua.edu.cn/simple ;;
+            *) exit 2 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/hermes-build"
+          cat > "$RUNNER_TEMP/hermes-build/constraints.txt" << 'BUILD'
+          setuptools==83.0.0
+          wheel==0.48.0
+          packaging==26.3
+          BUILD
+          uv="$RUNNER_TEMP/probe-tools/bin/uv"
+          "$uv" pip install \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
+            --default-index "$index" \
+            --build-constraint "$RUNNER_TEMP/hermes-build/constraints.txt" \
+            --no-deps \
+            --editable "$GITHUB_WORKSPACE/upstream"
+          "$uv" pip check \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+      - name: Test Hermes CLI startup
+        id: hermes_cli
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/state"
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/config"
+          mkdir -p "$RUNNER_TEMP/hermes-smoke/cache"
+          export HERMES_HOME="$RUNNER_TEMP/hermes-smoke/state"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/hermes-smoke/config"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/hermes-smoke/cache"
+          export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
+          import importlib.metadata as metadata
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import urllib.parse
+
+          distribution = metadata.distribution("hermes-agent")
+          assert distribution.version == "0.21.5", distribution.version
+          direct = json.loads(distribution.read_text("direct_url.json"))
+          assert direct.get("dir_info", {}).get("editable") is True
+          parsed = urllib.parse.urlparse(direct["url"])
+          assert parsed.scheme == "file"
+          source = pathlib.Path(urllib.parse.unquote(parsed.path)).resolve()
+          expected = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "upstream"
+          assert source == expected.resolve(), (source, expected)
+          print("PASS: pinned source installed in editable mode", flush=True)
+
+          executable = (
+              pathlib.Path(os.environ["UV_PROJECT_ENVIRONMENT"]) / "bin/hermes"
+          )
+          assert executable.is_file(), "Hermes entry point missing"
+          cwd = pathlib.Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke"
+          for argument in ("--help", "--version"):
+              print(f"Running hermes {argument}", flush=True)
+              result = subprocess.run(
+                  [str(executable), argument],
+                  cwd=cwd,
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  timeout=60,
+              )
+              print(result.stdout, flush=True)
+              assert result.returncode == 0, (
+                  f"{argument} exited with {result.returncode}"
+              )
+              assert result.stdout.strip(), f"{argument} produced no output"
+              if argument == "--help":
+                  assert "usage:" in result.stdout.lower(), (
+                      "Expected CLI usage text"
+                  )
+          print("PASS: Hermes help and version startup", flush=True)
+          PY
+
+      - name: Test reusable experimental installer
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+          PROBE_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/adapter-code"
+          git -C "$RUNNER_TEMP/adapter-code" init -q
+          git -C "$RUNNER_TEMP/adapter-code" remote add origin \
+            https://github.com/kxz2009-crypto/hermes-cn.git
+          git -C "$RUNNER_TEMP/adapter-code" fetch --depth=1 origin "$GITHUB_SHA"
+          test "$(git -C "$RUNNER_TEMP/adapter-code" rev-parse FETCH_HEAD)" \
+            = "$GITHUB_SHA"
+          git -C "$RUNNER_TEMP/adapter-code" show \
+            "$GITHUB_SHA:scripts/install-lite.sh" |
+            cat > "$RUNNER_TEMP/adapter-code/install-lite.sh"
+          args=(
+            --prefix "$RUNNER_TEMP/lite-install"
+            --uv "$RUNNER_TEMP/probe-tools/bin/uv"
+            --source "$PROBE_SOURCE"
+          )
+          if [ "$PROBE_RUNNER" = macos-15-intel ]; then
+            args+=(
+              --intel-wheel
+              "$RUNNER_TEMP/intel-wheel/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+            )
+          fi
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY' |
+          import os, pathlib
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "adapter-code/install-lite.sh"
+          text = path.read_text()
+          old = "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c"
+          new = "11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f"
+          assert text.count(old) == 2, "Unexpected installer hash occurrences"
+          print(text.replace(old, new), end="")
+          PY
+            cat > "$RUNNER_TEMP/adapter-code/install-lite-candidate.sh"
+          cat "$RUNNER_TEMP/adapter-code/install-lite-candidate.sh" > "$RUNNER_TEMP/adapter-code/install-lite.sh"
+          bash "$RUNNER_TEMP/adapter-code/install-lite.sh" "${args[@]}"
+          test -s "$RUNNER_TEMP/lite-install/INSTALL_COMPLETE"
+
+      - name: Test installer protection boundaries
+        env:
+          PROBE_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/protection/existing"
+          mkdir -p "$RUNNER_TEMP/protection/old-state"
+          mkdir -p "$RUNNER_TEMP/protection/bad-wheel"
+          echo 'KEEP-EXISTING-DIRECTORY' \
+            > "$RUNNER_TEMP/protection/existing/sentinel.txt"
+          echo 'invalid: [DO-NOT-LOAD-THIS-CONFIG' \
+            > "$RUNNER_TEMP/protection/old-state/config.yaml"
+          echo 'NOT-A-VALID-WHEEL' \
+            > "$RUNNER_TEMP/protection/bad-wheel/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+
+          "$RUNNER_TEMP/lite-install/venv/bin/python" - << 'PY'
+          import hashlib
+          import os
+          import pathlib
+          import subprocess
+
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"]).resolve()
+          base = temp / "protection"
+          installer = temp / "adapter-code/install-lite.sh"
+          uv = temp / "probe-tools/bin/uv"
+
+          def snapshot(directory):
+              result = {}
+              for path in sorted(directory.rglob("*")):
+                  relative = str(path.relative_to(directory))
+                  if path.is_symlink():
+                      result[relative] = ("link", os.readlink(path))
+                  elif path.is_file():
+                      result[relative] = (
+                          "file",
+                          hashlib.sha256(path.read_bytes()).hexdigest(),
+                          path.stat().st_mode,
+                      )
+                  elif path.is_dir():
+                      result[relative] = ("directory", path.stat().st_mode)
+              return result
+
+          def invoke(arguments, env=None):
+              return subprocess.run(
+                  arguments,
+                  cwd=base,
+                  env=env,
+                  stdin=subprocess.DEVNULL,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  timeout=60,
+              )
+
+          existing = base / "existing"
+          before = snapshot(existing)
+          result = invoke([
+              "bash", str(installer),
+              "--prefix", str(existing),
+              "--uv", str(uv),
+          ])
+          print(result.stdout)
+          assert result.returncode != 0, "Existing directory was accepted"
+          assert "Installation target already exists" in result.stdout
+          assert snapshot(existing) == before, "Existing directory changed"
+          print("PASS: existing directory rejected and preserved", flush=True)
+
+          if os.environ["PROBE_RUNNER"] == "macos-15-intel":
+              target = base / "must-not-be-created"
+              bad_wheel = base / "bad-wheel" / (
+                  "cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
+              )
+              assert not target.exists() and not target.is_symlink()
+              result = invoke([
+                  "bash", str(installer),
+                  "--prefix", str(target),
+                  "--uv", str(uv),
+                  "--intel-wheel", str(bad_wheel),
+              ])
+              print(result.stdout)
+              assert result.returncode != 0, "Invalid wheel was accepted"
+              assert "Intel wheel hash mismatch" in result.stdout
+              assert not target.exists() and not target.is_symlink()
+              print("PASS: bad Intel wheel blocked before installation", flush=True)
+          else:
+              print("N/A: Intel wheel guard on non-Intel platform", flush=True)
+
+          old_state = base / "old-state"
+          before = snapshot(old_state)
+          env = os.environ.copy()
+          env["HERMES_HOME"] = str(old_state)
+          root = temp / "lite-install"
+          result = invoke([str(root / "bin/hermes-cn"), "--help"], env)
+          assert result.returncode == 0, result.stdout
+          assert snapshot(old_state) == before, "Inherited state was modified"
+
+          # Help exposes the config path used by --ignore-user-config.
+          # Accept both absolute and HOME-abbreviated display paths.
+          config = root / "state/config.yaml"
+          candidates = [str(config)]
+          try:
+              candidates.append("~/" + str(config.relative_to(pathlib.Path.home())))
+          except ValueError:
+              pass
+          compact_output = "".join(result.stdout.split())
+          assert any(
+              "".join(candidate.split()) in compact_output
+              for candidate in candidates
+          ), "Help did not show the isolated configuration path:\n" + result.stdout
+          assert str(old_state) not in result.stdout
+          print("PASS: launcher selects isolated state; old config preserved", flush=True)
+          PY
+
+      - name: Check source and lockfile unchanged
+        if: always()
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          git diff --exit-code HEAD -- pyproject.toml uv.lock
+
+      - name: Write experiment summary
+        if: always()
+        env:
+          PROBE_SOURCE: ${{ matrix.source }}
+          PROBE_RUNNER: ${{ matrix.runner }}
+          DEPS_OUTCOME: ${{ steps.deps.outcome }}
+          HERMES_INSTALL_OUTCOME: ${{ steps.hermes_install.outcome }}
+          HERMES_CLI_OUTCOME: ${{ steps.hermes_cli.outcome }}
+        run: |
+          {
+            printf '## Hash-verified core wheel experiment\n\n'
+            printf -- '- Runner: %s\n' "$PROBE_RUNNER"
+            printf -- '- Selected index: %s\n' "$PROBE_SOURCE"
+            printf -- '- Upstream commit: %s\n' "$UPSTREAM_COMMIT"
+            printf -- '- Installation outcome: %s\n\n' "$DEPS_OUTCOME"
+            printf 'Export uses the original lock with --locked.\n'
+            printf 'Installation requires hashes and prebuilt wheels.\n'
+            printf 'Intel uses a separately hash-pinned custom cryptography wheel.\n'
+            printf 'Intel artifact: 11524969260; build run: 37719594029.\n'
+            printf 'The custom wheel targets macOS 15 x86_64; other OS versions are untested.\n'
+            printf 'The experimental artifact expires on 2026-10-14; this is not a release channel.\n'
+            printf 'uv and Python bootstrap still use upstream services.\n'
+            printf 'Index redirects and actual download hosts need separate audit.\n'
+            printf -- '- Hermes editable install: %s\n' "$HERMES_INSTALL_OUTCOME"
+            printf -- '- Hermes CLI startup: %s\n' "$HERMES_CLI_OUTCOME"
+            printf 'Build dependencies are version-constrained, not hash-locked yet.\n'
+            printf 'CLI checks cover help and version only.\n'
+            printf 'Model calls, browser tools and China-network access are not tested.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
