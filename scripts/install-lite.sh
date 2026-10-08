@@ -106,12 +106,100 @@ export XDG_CONFIG_DIRS="$prefix/config"
 export PIP_CONFIG_FILE=/dev/null
 
 commit=f97608f178d1ffeca59860195ab7da295f7c8e5f
+# CN_SOURCE_DOWNLOAD_BEGIN
+command -v curl >/dev/null || {
+  echo '缺少 curl，请先安装 curl。' >&2
+  exit 1
+}
+command -v python3 >/dev/null || {
+  echo '缺少 python3，请先完成准备步骤。' >&2
+  exit 1
+}
+
+source_dir="$prefix/work/source-download"
+mkdir -p "$source_dir"
+source_archive="hermes-source-$commit.tar.gz"
+source_url="https://hermes.localvram.cn/downloads/hermes-source/$commit/$source_archive"
+source_hash=c6a92c0e9d06f69714e4b194584891a6c27e45870ad40f4a3db1293db6cd9b58
+
+echo '从 LocalVRAM 腾讯云下载固定版本 Hermes 源码……'
+curl -q --fail --show-error --location \
+  --proto '=https' --proto-redir '=https' \
+  --connect-timeout 15 --max-time 1200 \
+  --retry 2 --retry-delay 3 \
+  "$source_url" |
+  cat > "$source_dir/$source_archive"
+
+python3 - "$source_dir/$source_archive" "$source_hash" \
+  "$source_dir/extracted" << 'CN_SOURCE_VERIFY_END'
+import hashlib
+from pathlib import Path, PurePosixPath
+import shutil
+import sys
+import tarfile
+
+archive, expected, destination = sys.argv[1:]
+digest = hashlib.sha256()
+with open(archive, "rb") as stream:
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+if digest.hexdigest() != expected:
+    sys.exit("STOP：源码包 SHA256 不匹配，未解包。")
+
+root = Path(destination)
+if root.exists() or root.is_symlink():
+    sys.exit("STOP：源码恢复目录已存在，不覆盖。")
+
+with tarfile.open(archive, "r:gz") as package:
+    members = package.getmembers()
+    seen = set()
+    total = 0
+    for member in members:
+        path = PurePosixPath(member.name)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or not path.parts
+            or path.parts[0] != "upstream.git"
+            or not (member.isdir() or member.isfile())
+            or str(path) in seen
+        ):
+            sys.exit("STOP：源码包包含非预期路径或文件类型。")
+        seen.add(str(path))
+        total += member.size
+    if not members or total > 1024 * 1024 * 1024:
+        sys.exit("STOP：源码包内容为空或大小异常。")
+
+    root.mkdir(mode=0o700)
+    for member in members:
+        target = root.joinpath(*PurePosixPath(member.name).parts)
+        if member.isdir():
+            target.mkdir(mode=0o700, parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with package.extractfile(member) as source:
+                with target.open("xb") as output:
+                    shutil.copyfileobj(source, output)
+            target.chmod(0o600)
+
+print("PASS：源码包哈希、路径及文件类型校验")
+CN_SOURCE_VERIFY_END
+
+source_repo="$source_dir/extracted/upstream.git"
+[ "$(git --git-dir="$source_repo" rev-parse HEAD)" = "$commit" ]
+git --git-dir="$source_repo" fsck --full
+
 git init -q "$prefix/source"
 git -C "$prefix/source" remote add origin \
   https://github.com/NousResearch/hermes-agent.git
-git -C "$prefix/source" fetch --depth=1 origin "$commit"
+git -c protocol.file.allow=always -C "$prefix/source" \
+  fetch --depth=1 --update-shallow "$source_repo" \
+  refs/heads/pinned
+[ "$(git -C "$prefix/source" rev-parse FETCH_HEAD)" = "$commit" ]
 git -C "$prefix/source" checkout --detach FETCH_HEAD
 [ "$(git -C "$prefix/source" rev-parse HEAD)" = "$commit" ]
+echo 'PASS：固定版本源码已从本地分发包恢复'
+# CN_SOURCE_DOWNLOAD_END
 
 "$uv" python install --no-bin 3.11.17
 "$uv" venv --managed-python --python 3.11.17 "$prefix/venv"
