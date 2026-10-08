@@ -108,10 +108,10 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = x86_64
           repo=kxz2009-crypto/hermes-cn
-          artifact=11507708102
+          artifact=11524969260
           wheel=cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl
-          wheel_hash=bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c
-          zip_hash=0ea42d3995d7fd2f3136756545567e156dbfaa060595f8a52cedeac9eaf764ec
+          wheel_hash=11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f
+          zip_hash=5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7
           mkdir -p "$RUNNER_TEMP/intel-wheel"
           cd "$RUNNER_TEMP/intel-wheel"
 
@@ -121,15 +121,15 @@ jobs:
           "$UV_PROJECT_ENVIRONMENT/bin/python" - << 'PY'
           import json, pathlib
           data = json.loads(pathlib.Path("artifact.json").read_text())
-          assert data["id"] == 11507708102
+          assert data["id"] == 11524969260
           assert data["expired"] is False
-          assert data["name"] == "experimental-cryptography-50-macos15-intel"
-          assert data["workflow_run"]["id"] == 37679350161
+          assert data["name"] == "experimental-cryptography-50-macos15-intel-provenance"
+          assert data["workflow_run"]["id"] == 37719594029
           assert data["workflow_run"]["head_sha"] == (
-              "6577deae4d56be528b49643790cbe91a7b21f16f"
+              "1b3d7ea78cdc8f86150028c7a31959fee6e56005"
           )
           assert data["digest"] == (
-              "sha256:0ea42d3995d7fd2f3136756545567e156dbfaa060595f8a52cedeac9eaf764ec"
+              "sha256:5a70cd05e694bce29675f0654e47880d14d6343463d943bd88ce3017704f58e7"
           )
           print("PASS: artifact identity and provenance")
           PY
@@ -163,7 +163,7 @@ jobs:
           replacement = (
               f"cryptography @ {wheel.as_uri()} "
               "--hash=sha256:"
-              "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c"
+              "11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f"
           )
           result, count = re.subn(pattern, lambda _: replacement, source)
           assert count == 1
@@ -484,7 +484,7 @@ jobs:
             printf 'Export uses the original lock with --locked.\n'
             printf 'Installation requires hashes and prebuilt wheels.\n'
             printf 'Intel uses a separately hash-pinned custom cryptography wheel.\n'
-            printf 'Intel artifact: 11507708102; build run: 37679350161.\n'
+            printf 'Intel artifact: 11524969260; build run: 37719594029.\n'
             printf 'The custom wheel targets macOS 15 x86_64; other OS versions are untested.\n'
             printf 'The experimental artifact expires on 2026-10-14; this is not a release channel.\n'
             printf 'uv and Python bootstrap still use upstream services.\n'

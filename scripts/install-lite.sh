@@ -70,7 +70,7 @@ if [ "$os/$arch" = Darwin/x86_64 ]; then
   esac
   actual=$(shasum -a 256 "$intel_wheel")
   actual=${actual%% *}
-  [ "$actual" = bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c ] ||
+  [ "$actual" = 11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f ] ||
     fail 'Intel wheel hash mismatch'
 fi
 
@@ -132,7 +132,7 @@ if [ "$os/$arch" = Darwin/x86_64 ]; then
 import hashlib, pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 wheel = root / "wheels/cryptography-50.0.0-cp311-abi3-macosx_15_0_x86_64.whl"
-digest = "bb6320d4dc523339041c40e58176beb3235d59c133968490694fd1924c68c49c"
+digest = "11504d18f54d3435a799f70febb3001b1efbab30d6d05570e447d4c571318a6f"
 assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest
 text = (root / "work/core-original.txt").read_text()
 pattern = r"(?m)^cryptography==50\.0\.0[^\n]*(?:\n[ \t]+[^\n]*)*"
