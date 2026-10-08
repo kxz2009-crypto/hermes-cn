@@ -1,0 +1,18 @@
+{
+  "name": "pem",
+  "version": "4.0.0",
+  "archive_sha256": "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120",
+  "source_url": "https://static.crates.io/crates/pem/pem-4.0.0.crate",
+  "declared_license": "MIT",
+  "declared_license_file": null,
+  "repository": "https://github.com/jcreekmore/pem-rs.git",
+  "notice_files": [
+    {
+      "path": "pem-4.0.0/LICENSE.md",
+      "sha256": "b7c76ff4466a3aeb6a7d903e81b651335e97d64ecb857e2ee9812a36c6fd1acf",
+      "text": "The MIT License (MIT)\n\nCopyright (c) 2016 Jonathan Creekmore\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+    }
+  ],
+  "review_status": "COLLECTED_PENDING_REVIEW",
+  "scope": "Cargo.lock candidate; inclusion in the wheel is not established"
+}
