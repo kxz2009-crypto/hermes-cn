@@ -74,7 +74,7 @@ set -euo pipefail
 umask 077
 adapter="$HOME/.local/share/hermes-cn-adapter-r2"
 prefix="$HOME/.local/share/hermes-cn-lite-r2"
-commit=1af8db072adc994306cd4fa58b1ffa98c5a0884a
+commit=247f8dfc57b7a0a3a219ab7ee3968b3ca8f9e64f
 [ ! -e "$adapter" ] &amp;&amp; [ ! -L "$adapter" ]
 [ ! -e "$prefix" ] &amp;&amp; [ ! -L "$prefix" ]
 mkdir -p "$(dirname "$adapter")"
@@ -106,10 +106,30 @@ INSTALL</code></pre>
 </section>
 
 <section class="card">
+<h2>配置国内 GLM Coding Plan</h2>
+<p>安装完成后运行以下命令。setup 会隐藏输入 API Key，
+仅保存到本次安装的独立状态目录；已有凭据不会被覆盖。</p>
+<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" setup
+"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" status</code></pre>
+<p>status 仅检查本地配置，不发送请求。
+需要验证服务时，再运行 check；该操作可能消耗套餐额度。</p>
+<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" check</code></pre>
+<p>检查成功后开始对话：</p>
+<pre><code>"$HOME/.local/share/hermes-cn-lite-r2/bin/hermes-glm" chat</code></pre>
+<p class="small">默认使用国内 Coding Plan 接口和 glm-5.3-flash。
+遇到 429，请检查套餐额度和并发情况，避免连续重试。
+对话启用 safe-mode，但不等于禁用所有工具。
+本入口不会自动升级已有安装；请勿删除已有目录强行重装。</p>
+<p class="small">配置流程和六组安装 CI 已通过。
+北京服务器真实对话仍记录为 HTTP 429 未通过；
+其他电脑无代理首次安装待验证。</p>
+</section>
+
+<section class="card">
 <h2>下载与验证记录</h2>
 <p><a href="https://github.com/kxz2009-crypto/hermes-cn/releases/tag/deps-cryptography-50.0.0-macos15-intel-r2">Intel r2 分发包及声明</a></p>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37733389926">六组 CI 与 Intel 自动下载验收结果</a></p>
-<p><a href="https://github.com/kxz2009-crypto/hermes-cn/tree/1af8db072adc994306cd4fa58b1ffa98c5a0884a/docs">固定安装器版本文档及历史记录</a></p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/actions/runs/37735784997">六组 CI 与 Intel 自动下载验收结果</a></p>
+<p><a href="https://github.com/kxz2009-crypto/hermes-cn/tree/247f8dfc57b7a0a3a219ab7ee3968b3ca8f9e64f/docs">固定安装器版本文档及历史记录</a></p>
 <p class="small">依赖资产为实验预发布。第三方声明材料不代表完整链接组件清单，
 也不构成完整合规认证。一期实验安装入口验收通过；无代理首次安装及更多产品功能仍在验证。</p>
 </section>
