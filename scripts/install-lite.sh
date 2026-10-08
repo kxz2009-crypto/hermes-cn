@@ -123,12 +123,50 @@ source_url="https://hermes.localvram.cn/downloads/hermes-source/$commit/$source_
 source_hash=c6a92c0e9d06f69714e4b194584891a6c27e45870ad40f4a3db1293db6cd9b58
 
 echo '从 LocalVRAM 腾讯云下载固定版本 Hermes 源码……'
-curl -q --fail --show-error --location \
-  --proto '=https' --proto-redir '=https' \
-  --connect-timeout 15 --max-time 1200 \
-  --retry 2 --retry-delay 3 \
-  "$source_url" |
-  cat > "$source_dir/$source_archive"
+# CN_SOURCE_FETCH_BEGIN
+source_started=$SECONDS
+source_rc=1
+for source_attempt in 1 2 3; do
+  source_remaining=$((1200 - (SECONDS - source_started)))
+  if [ "$source_remaining" -le 0 ]; then
+    echo 'STOP：源码下载超过总时间限制。' >&2
+    exit 28
+  fi
+
+  printf '源码下载尝试：%s/3；本次最多 %s 秒\n' \
+    "$source_attempt" "$source_remaining"
+
+  # 每次重新覆盖文件，避免把残缺响应拼接进下一次下载。
+  if curl -q --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' \
+    --connect-timeout 15 --max-time "$source_remaining" \
+    --speed-limit 1024 --speed-time 60 --retry 0 \
+    "$source_url" |
+    cat > "$source_dir/$source_archive"
+  then
+    source_rc=0
+    break
+  else
+    source_rc=$?
+  fi
+
+  printf '源码下载未完成，退出码：%s\n' "$source_rc" >&2
+  case "$source_rc" in
+    6|7|18|28|35|52|55|56|92) ;;
+    *) exit "$source_rc" ;;
+  esac
+
+  if [ "$source_attempt" -lt 3 ]; then
+    echo '等待 3 秒后重新下载……' >&2
+    sleep 3
+  fi
+done
+
+if [ "$source_rc" -ne 0 ]; then
+  echo 'STOP：源码下载重试仍失败，保留诊断文件。' >&2
+  exit "$source_rc"
+fi
+# CN_SOURCE_FETCH_END
 
 python3 - "$source_dir/$source_archive" "$source_hash" \
   "$source_dir/extracted" << 'CN_SOURCE_VERIFY_END'
