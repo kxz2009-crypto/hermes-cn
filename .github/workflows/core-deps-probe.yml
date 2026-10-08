@@ -519,6 +519,76 @@ jobs:
           print("PASS: automatic Intel download, installation and retained notices")
           PY
 
+      - name: Test multi-model entry and offline routing
+        run: |
+          set -euo pipefail
+          umask 077
+          code="$RUNNER_TEMP/cn-model-routing-code"
+          fixture="$RUNNER_TEMP/cn-model-routing-fixture"
+          revision="${{ github.sha }}"
+
+          test ! -e "$code"
+          test ! -L "$code"
+          test ! -e "$fixture"
+          test ! -L "$fixture"
+          test -x "$UV_PROJECT_ENVIRONMENT/bin/python"
+
+          mkdir -p "$code" "$fixture/bin" "$fixture/state"
+          git -C "$code" init -q
+          git -C "$code" remote add origin \
+            https://github.com/kxz2009-crypto/hermes-cn.git
+          git -C "$code" fetch --depth=1 origin "$revision"
+          git -C "$code" checkout --detach FETCH_HEAD
+          test "$(git -C "$code" rev-parse HEAD)" = "$revision"
+
+          ln -s "$UV_PROJECT_ENVIRONMENT" "$fixture/venv"
+
+          # Extract the helper actually embedded in the installer.
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - "$code" << 'PY' |
+          from pathlib import Path
+          import sys
+          root = Path(sys.argv[1])
+          text = (root / "scripts/install-lite.sh").read_text()
+          marker = 'cat > "$prefix/bin/hermes-model.py" << \'CN_MODEL_PY_END\'\n'
+          assert text.count(marker) == 1
+          helper = text.split(marker, 1)[1].split("\nCN_MODEL_PY_END\n", 1)[0] + "\n"
+          assert helper == (root / "scripts/hermes-model.py").read_text()
+          compile(helper, "hermes-model.py", "exec")
+          sys.stdout.write(helper)
+          PY
+            cat > "$fixture/bin/hermes-model.py"
+
+          # Extract the actual main launcher, including model dispatch.
+          "$UV_PROJECT_ENVIRONMENT/bin/python" - "$code" << 'PY' |
+          from pathlib import Path
+          import sys
+          text = (Path(sys.argv[1]) / "scripts/install-lite.sh").read_text()
+          marker = 'cat > "$prefix/bin/hermes-cn" << \'LAUNCH\'\n'
+          assert text.count(marker) == 1
+          launcher = text.split(marker, 1)[1].split("\nLAUNCH\n", 1)[0] + "\n"
+          assert 'hermes-model.py' in launcher
+          sys.stdout.write(launcher)
+          PY
+            cat > "$fixture/bin/hermes-cn"
+
+          chmod 700 "$fixture/bin/hermes-cn" "$fixture/bin/hermes-model.py"
+          bash -n "$fixture/bin/hermes-cn"
+          "$fixture/bin/hermes-cn" model --help
+          "$fixture/bin/hermes-cn" model list
+
+          # With no configuration, status must fail locally.
+          if "$fixture/bin/hermes-cn" model status; then
+            echo "FAIL: unconfigured model status unexpectedly succeeded"
+            exit 1
+          fi
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" -I \
+            "$code/scripts/test-model-routing.py" \
+            "$fixture/bin/hermes-model.py" \
+            "$fixture"
+
+          echo "PASS: delivered launcher, embedded helper and ten offline routes"
+
       - name: Check source and lockfile unchanged
         if: always()
         working-directory: upstream
