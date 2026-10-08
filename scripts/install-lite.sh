@@ -239,6 +239,9 @@ git -C "$prefix/source" checkout --detach FETCH_HEAD
 echo 'PASS：固定版本源码已从本地分发包恢复'
 # CN_SOURCE_DOWNLOAD_END
 
+# Use the verified standalone Python mirror and pinned build.
+export UV_PYTHON_INSTALL_MIRROR=https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone
+export UV_PYTHON_CPYTHON_BUILD=20261003
 "$uv" python install --no-bin 3.11.17
 "$uv" venv --managed-python --python 3.11.17 "$prefix/venv"
 python="$prefix/venv/bin/python"
@@ -247,14 +250,52 @@ if [ "$os/$arch" = Darwin/x86_64 ] && [ -z "$intel_wheel" ]; then
   bundle_dir="$prefix/work/intel-bundle"
   mkdir -p "$bundle_dir"
   bundle_name=cryptography-50.0.0-macos15-intel-r2-bundle.zip
-  bundle_url="https://github.com/kxz2009-crypto/hermes-cn/releases/download/deps-cryptography-50.0.0-macos15-intel-r2/$bundle_name"
+  bundle_url="https://hermes.localvram.cn/downloads/intel/cryptography-50.0.0-macos15-intel-r2/$bundle_name"
 
-  curl -q --fail --silent --show-error --location \
-    --proto '=https' --proto-redir '=https' \
-    --connect-timeout 15 --max-time 300 \
-    --retry 3 --retry-delay 5 \
-    "$bundle_url" |
-    cat > "$bundle_dir/$bundle_name"
+  # CN_INTEL_FETCH_BEGIN
+  bundle_started=$SECONDS
+  bundle_rc=1
+  for bundle_attempt in 1 2 3; do
+    bundle_remaining=$((300 - (SECONDS - bundle_started)))
+    if [ "$bundle_remaining" -le 0 ]; then
+      echo 'STOP：Intel 分发包下载超过总时间限制。' >&2
+      exit 28
+    fi
+
+    printf 'Intel 分发包下载尝试：%s/3；本次最多 %s 秒\n' \
+      "$bundle_attempt" "$bundle_remaining"
+
+    # 每次重新覆盖文件，避免把残缺响应拼接进下一次下载。
+    if curl -q --fail --silent --show-error --location \
+      --proto '=https' --proto-redir '=https' \
+      --connect-timeout 15 --max-time "$bundle_remaining" \
+      --speed-limit 1024 --speed-time 60 --retry 0 \
+      "$bundle_url" |
+      cat > "$bundle_dir/$bundle_name"
+    then
+      bundle_rc=0
+      break
+    else
+      bundle_rc=$?
+    fi
+
+    printf 'Intel 分发包下载未完成，退出码：%s\n' "$bundle_rc" >&2
+    case "$bundle_rc" in
+      6|7|18|28|35|52|55|56|92) ;;
+      *) exit "$bundle_rc" ;;
+    esac
+
+    if [ "$bundle_attempt" -lt 3 ]; then
+      echo '等待 3 秒后重新下载……' >&2
+      sleep 3
+    fi
+  done
+
+  if [ "$bundle_rc" -ne 0 ]; then
+    echo 'STOP：Intel 分发包下载重试仍失败，保留诊断文件。' >&2
+    exit "$bundle_rc"
+  fi
+  # CN_INTEL_FETCH_END
 
   (
     cd "$bundle_dir"

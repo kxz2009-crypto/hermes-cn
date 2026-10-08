@@ -1,0 +1,6 @@
+Python： 3.11.17
+架构： x86_64
+独立运行时： /home/gao20/projects/hermes-cn/artifacts/python-mirror-check/install.VUSYuaGb/python/cpython-3.11.17-linux-x86_64-gnu
+SSL： OpenSSL 3.5.9 29 Sep 2026
+PASS：版本、独立路径、SSL 导入、SQLite、压缩及哈希检查
+范围：本台 Linux/WSL；Mac 实际安装仍需 CI 验证。
