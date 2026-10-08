@@ -306,8 +306,11 @@ PRESETS = {
     ),
 }
 
+class UserInputError(ValueError):
+    pass
+
 def fail(message):
-    raise ValueError(message)
+    raise UserInputError(message)
 
 def valid_id(value):
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,39}", value):
@@ -354,6 +357,20 @@ def write_new(path, text):
     )
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
         stream.write(text)
+
+class TerminalIO:
+    def __init__(self, reader, writer):
+        self.reader = reader
+        self.writer = writer
+
+    def readline(self):
+        return self.reader.readline()
+
+    def write(self, text):
+        return self.writer.write(text)
+
+    def flush(self):
+        return self.writer.flush()
 
 def ask(tty, label, default=""):
     suffix = f" [{default}]" if default else ""
@@ -529,7 +546,9 @@ safe-mode 不等于禁用所有工具或操作系统沙箱。""")
     if action == "setup":
         if len(args) > 2:
             fail("用法：model setup [预设名称] [新配置名称]")
-        with open("/dev/tty", "r+", encoding="utf-8") as tty:
+        with open("/dev/tty", "r", encoding="utf-8") as reader, \
+                open("/dev/tty", "w", encoding="utf-8") as writer:
+            tty = TerminalIO(reader, writer)
             if args:
                 preset = args[0]
             else:
@@ -583,6 +602,9 @@ safe-mode 不等于禁用所有工具或操作系统沙箱。""")
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except UserInputError as exc:
+        print("操作失败：" + str(exc), file=sys.stderr)
+        sys.exit(2)
     except (ValueError, OSError, KeyError, TypeError):
         print("操作失败：请检查命令、配置、文件权限或目标是否已存在。", file=sys.stderr)
         sys.exit(2)

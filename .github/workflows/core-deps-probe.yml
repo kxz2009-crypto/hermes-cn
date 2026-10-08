@@ -583,6 +583,11 @@ jobs:
           fi
 
           "$UV_PROJECT_ENVIRONMENT/bin/python" -I \
+            "$code/scripts/test-model-terminal.py" \
+            "$code/scripts/install-lite.sh" \
+            "$UV_PROJECT_ENVIRONMENT"
+
+          "$UV_PROJECT_ENVIRONMENT/bin/python" -I \
             "$code/scripts/test-model-routing.py" \
             "$fixture/bin/hermes-model.py" \
             "$fixture"
