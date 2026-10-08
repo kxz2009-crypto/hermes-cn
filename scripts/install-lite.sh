@@ -546,6 +546,13 @@ safe-mode 不等于禁用所有工具或操作系统沙箱。""")
     if action == "setup":
         if len(args) > 2:
             fail("用法：model setup [预设名称] [新配置名称]")
+        # A named existing configuration must be rejected before opening a TTY.
+        if args:
+            if args[0] not in PRESETS:
+                fail("未知预设，请运行 model list。")
+            requested_name = valid_id(args[1] if len(args) == 2 else args[0])
+            if os.path.lexists(store / requested_name):
+                fail("配置已存在，拒绝覆盖。可使用另一个新配置名称。")
         with open("/dev/tty", "r", encoding="utf-8") as reader, \
                 open("/dev/tty", "w", encoding="utf-8") as writer:
             tty = TerminalIO(reader, writer)

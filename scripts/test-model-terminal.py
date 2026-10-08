@@ -133,6 +133,7 @@ with tempfile.TemporaryDirectory(prefix="hermes-cn-terminal-") as directory:
         result = subprocess.run(
             [str(launcher), "model", *args],
             env=env, cwd=root, stdin=subprocess.DEVNULL,
+            start_new_session=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", timeout=15,
         )
