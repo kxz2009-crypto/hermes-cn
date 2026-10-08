@@ -112,6 +112,100 @@ jobs:
           printf '%s  cryptography-50.0.0.tar.gz\n' "$source_hash" |
             shasum -a 256 -c -
 
+      - name: Record build inputs and OpenSSL provenance
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/wheelhouse/provenance"
+          mkdir -p "$evidence"
+          "$OPENSSL_DIR/bin/openssl" version |
+            grep -E '^OpenSSL 3\.6\.3([[:space:]]|$)'
+
+          "$RUNNER_TEMP/build-env/bin/python" - << 'PY' |
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import platform
+          from datetime import datetime, timezone
+
+          root = pathlib.Path(os.environ["OPENSSL_DIR"]).resolve()
+          receipt = root / "INSTALL_RECEIPT.json"
+          assert receipt.is_file(), "Missing Homebrew installation receipt"
+          raw_receipt = receipt.read_bytes()
+          receipt_data = json.loads(raw_receipt)
+          libraries = []
+          for name in ("libcrypto.a", "libssl.a"):
+              path = root / "lib" / name
+              raw = path.read_bytes()
+              assert raw
+              libraries.append({
+                  "path": str(path),
+                  "size": len(raw),
+                  "sha256": hashlib.sha256(raw).hexdigest(),
+              })
+          notices = []
+          for path in sorted(root.rglob("*")):
+              if not path.is_file():
+                  continue
+              if not path.name.lower().startswith(
+                  ("license", "licence", "notice", "copying")
+              ):
+                  continue
+              raw = path.read_bytes()
+              assert len(raw) <= 2_000_000
+              notices.append({
+                  "path": str(path.relative_to(root)),
+                  "sha256": hashlib.sha256(raw).hexdigest(),
+                  "text": raw.decode("utf-8"),
+              })
+          assert notices, "No OpenSSL installation notices found"
+          source = (
+              pathlib.Path(os.environ["RUNNER_TEMP"])
+              / "source/cryptography-50.0.0.tar.gz"
+          )
+          print(json.dumps({
+              "schema_version": 1,
+              "scope": "Inputs observed in this build; not evidence for an older wheel",
+              "time_utc": datetime.now(timezone.utc).isoformat(),
+              "workflow_commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "upstream_commit": os.environ["UPSTREAM_COMMIT"],
+              "runner_image": os.environ.get("ImageOS"),
+              "runner_image_version": os.environ.get("ImageVersion"),
+              "machine": platform.machine(),
+              "macos": platform.mac_ver()[0],
+              "python": platform.python_version(),
+              "deployment_target": os.environ["MACOSX_DEPLOYMENT_TARGET"],
+              "openssl_static": os.environ["OPENSSL_STATIC"],
+              "openssl_prefix": str(root),
+              "receipt_sha256": hashlib.sha256(raw_receipt).hexdigest(),
+              "homebrew_receipt": receipt_data,
+              "static_libraries": libraries,
+              "installed_notices": notices,
+              "cryptography_source_sha256": hashlib.sha256(
+                  source.read_bytes()
+              ).hexdigest(),
+          }, ensure_ascii=False, indent=2))
+          PY
+            cat > "$evidence/build-inputs.json"
+
+          {
+            sw_vers
+            brew --version
+            rustc -Vv
+            cargo --version
+            clang --version
+            xcrun --show-sdk-version
+            "$OPENSSL_DIR/bin/openssl" version -a
+            "$RUNNER_TEMP/build-env/bin/python" -m pip freeze
+          } | cat > "$evidence/toolchain.txt"
+
+          shasum -a 256 \
+            "$OPENSSL_DIR/lib/libcrypto.a" \
+            "$OPENSSL_DIR/lib/libssl.a" |
+            cat > "$evidence/STATIC_LIBRARIES.sha256"
+
       - name: Build static OpenSSL wheel
         run: |
           set -euo pipefail
@@ -204,10 +298,23 @@ jobs:
           shasum -a 256 *.whl | cat > "$RUNNER_TEMP/wheelhouse/SHA256SUMS"
           cat "$RUNNER_TEMP/wheelhouse/SHA256SUMS"
 
+      - name: Verify build inputs remained unchanged
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/wheelhouse/provenance"
+          shasum -a 256 -c "$evidence/STATIC_LIBRARIES.sha256"
+          cd "$RUNNER_TEMP/wheelhouse"
+          shasum -a 256 \
+            *.whl SHA256SUMS \
+            provenance/build-inputs.json \
+            provenance/toolchain.txt \
+            provenance/STATIC_LIBRARIES.sha256 |
+            cat > BUILD_SHA256SUMS
+
       - name: Save experimental wheel
         uses: actions/upload-artifact@v4
         with:
-          name: experimental-cryptography-50-macos15-intel
+          name: experimental-cryptography-50-macos15-intel-provenance
           path: ${{ runner.temp }}/wheelhouse/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
