@@ -221,3 +221,4 @@ __marimo__/
 
 # Local binary archives; documents are tracked under docs/
 /artifacts/
+__pycache__/
