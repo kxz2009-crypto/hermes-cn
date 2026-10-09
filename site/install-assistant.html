@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Hermes安装助手</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#182b45;font:15px/1.7 system-ui,sans-serif}
+main{max-width:760px;margin:auto;padding:18px}
+h1{font-size:22px;margin:0 0 6px}
+p{margin:8px 0}
+.note{color:#52647a;font-size:13px}
+.quick{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+button{font:inherit;cursor:pointer;border:1px solid #cbdbea;border-radius:9px;padding:8px 12px;background:#f1f6fc;color:#145db1}
+button:disabled{opacity:.55;cursor:wait}
+#messages{height:260px;overflow:auto;border:1px solid #dce5ef;border-radius:12px;padding:12px;background:#f8fafc}
+.message{margin-bottom:14px;padding:10px 12px;border-radius:9px;background:#fff;overflow-wrap:anywhere}
+.message.user{background:#e9f2ff}
+.message strong{display:block;font-size:13px;margin-bottom:4px}
+.message .text{white-space:pre-wrap}
+textarea{display:block;resize:vertical;width:100%;min-height:90px;border:1px solid #b8c9dc;border-radius:10px;padding:10px;font:inherit;margin-top:6px}
+.actions{display:flex;gap:10px;align-items:center;margin-top:10px}
+#send{background:#145db1;color:#fff}
+#status{min-height:24px;color:#52647a;font-size:13px}
+a{color:#145db1}
+</style>
+
+<style>
+html,body{height:100%;min-height:0}
+body{font-size:14px}
+main{height:100%;min-height:0;display:flex;flex-direction:column;
+  padding:14px;max-width:none}
+h1{font-size:19px}
+.note{font-size:12px}
+.quick{margin:10px 0;gap:6px}
+.quick button{font-size:12px;padding:6px 8px}
+#messages{height:auto;min-height:100px;flex:1}
+textarea{min-height:66px;max-height:130px;font-size:16px}
+#status{font-size:12px}
+.actions{flex-wrap:wrap}
+</style>
+</head>
+<body>
+<main>
+<h1>Hermes安装助手</h1>
+<p class="note" id="assistant-availability" role="note">问答功能目前仅供内部测试，公开访问尚未开放。安装指南可正常使用。</p>
+<p>告诉我你使用的系统，或粘贴安装错误提示。</p>
+<p class="note">请勿发送 API Key、密码、支付凭据或包含个人信息的完整日志。</p>
+<p class="note">当前为候选界面，AI 服务尚待接入。本窗口不会直接操作你的电脑。</p>
+
+<div class="quick" aria-label="快捷问题">
+<button type="button" data-question="我想确认电脑是否满足安装要求，需要提供哪些信息？">电脑能安装吗？</button>
+<button type="button" data-question="请分别说明 Windows 和 Mac 用户从哪里开始安装。">开始安装</button>
+<button type="button" data-question="安装报错时，我应该提供哪些信息？哪些内容不能发送？">安装报错</button>
+<button type="button" data-question="安装完成后，如何配置和使用 DeepSeek？">配置模型</button>
+</div>
+
+<div id="messages" role="log" aria-label="问答记录" aria-live="polite"></div>
+
+<form id="form">
+<label for="question">你的问题</label>
+<textarea id="question" maxlength="2000"
+  placeholder="例如：Windows 11，安装时出现 Connection timed out，该怎么办？"></textarea>
+<div class="actions">
+<button id="send" type="submit">发送</button>
+<button id="clear" type="button">清空对话</button>
+<a href="/guide.html" target="_blank" rel="noopener">查看完整指南</a>
+</div>
+</form>
+<p id="status" role="status"></p>
+<p class="note">问题会发送给网站问答服务处理。对话仅保留在当前页面内存中，刷新或清空后不保留。</p>
+</main>
+
+<script>
+"use strict";
+const endpoint = "/api/install-assistant/chat";
+const form = document.getElementById("form");
+const input = document.getElementById("question");
+const box = document.getElementById("messages");
+const status = document.getElementById("status");
+const buttons = [...document.querySelectorAll("button")];
+let history = [];
+let busy = false;
+
+function addMessage(role, text) {
+  const item = document.createElement("div");
+  item.className = "message " + role;
+  const label = document.createElement("strong");
+  label.textContent = role === "user" ? "你" : "Hermes安装助手";
+  const content = document.createElement("div");
+  content.className = "text";
+  content.textContent = text;
+  item.append(label, content);
+  box.append(item);
+  while (box.children.length > 24) box.firstElementChild.remove();
+  box.scrollTop = box.scrollHeight;
+}
+
+function setBusy(value) {
+  busy = value;
+  buttons.forEach(button => button.disabled = value);
+  input.disabled = value;
+  form.setAttribute("aria-busy", String(value));
+}
+
+function reset() {
+  history = [];
+  box.replaceChildren();
+  input.value = "";
+  status.textContent = "";
+  addMessage("assistant",
+    "你好！我可以协助理解安装指南和排查安装问题。请先说明操作系统。首次使用请勿粘贴密钥或完整配置文件。");
+}
+
+async function submitQuestion(question) {
+  if (busy || !question) return;
+  if (question.length > 2000) {
+    status.textContent = "请将问题缩短至 2000 字以内。";
+    return;
+  }
+
+  // 仅拦截部分明显凭据格式，不能替代用户检查和服务端防护。
+  if (/\bsk-[A-Za-z0-9_-]{12,}|(?:api[_ -]?key|authorization|password)\s*[:=]\s*\S+/i.test(question)) {
+    status.textContent = "内容可能包含密钥或密码，请删除敏感内容后再发送。";
+    return;
+  }
+
+  const outgoing = [...history, {role:"user", content:question}].slice(-12);
+  addMessage("user", question);
+  input.value = "";
+  setBusy(true);
+  status.textContent = "正在查询安装资料，请稍候……";
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+
+  try {
+    const response = await fetch(endpoint, {
+      method:"POST",
+      credentials:"same-origin",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({messages:outgoing}),
+      signal:controller.signal
+    });
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error("安装助手目前仅供内部测试，公开问答尚未开放。请先查看完整安装指南。");
+      }
+      if (response.status === 400) {
+        throw new Error("问题内容未通过检查。请删除敏感信息，或清空对话后简要描述问题。");
+      }
+      if (response.status === 401) {
+        throw new Error("当前访问未获授权，请先查看完整安装指南。");
+      }
+      if (response.status === 429) {
+        throw new Error("当前提问次数或同时处理的问题已达上限，请稍后再试。");
+      }
+      if (response.status === 413) {
+        throw new Error("对话内容过长，请清空对话后简要描述问题。");
+      }
+      if ([404,405,501].includes(response.status)) {
+        throw new Error("问答入口暂不可用，请先查看完整安装指南。");
+      }
+      if ([502,503,504].includes(response.status)) {
+        throw new Error("问答服务暂不可用，请稍后再试，或先查看完整安装指南。");
+      }
+      throw new Error("本次请求未完成，请稍后再试。");
+    }
+
+    const type = response.headers.get("content-type") || "";
+    if (!type.includes("application/json")) {
+      throw new Error("问答接口尚未正确接通，请先查看完整安装指南。");
+    }
+
+    const data = await response.json();
+    if (typeof data.answer !== "string" ||
+        !data.answer.trim() || data.answer.length > 12000) {
+      throw new Error("未收到有效回答，请稍后再试。");
+    }
+
+    addMessage("assistant", data.answer);
+    history = [...outgoing, {role:"assistant", content:data.answer}].slice(-12);
+    status.textContent = "AI 回答仅供操作参考；环境检查和订单状态以对应系统结果为准。";
+  } catch (error) {
+    status.textContent = error.name === "AbortError"
+      ? "等待回答超时。上一条请求可能仍在处理，请勿连续提交，可稍后重试。"
+      : error instanceof TypeError
+        ? "网络连接未完成，请检查连接后重试。"
+        : error.message;
+    input.value = question;
+  } finally {
+    clearTimeout(timer);
+    setBusy(false);
+    input.focus();
+  }
+}
+
+form.addEventListener("submit", event => {
+  event.preventDefault();
+  submitQuestion(input.value.trim());
+});
+document.getElementById("clear").addEventListener("click", reset);
+document.querySelectorAll("[data-question]").forEach(button => {
+  button.addEventListener("click", () => {
+    input.value = button.dataset.question;
+    input.focus();
+  });
+});
+reset();
+</script>
+</body>
+</html>
