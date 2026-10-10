@@ -1,5 +1,5 @@
 const api=require('../../services/install'),ui=require('../../utils/ui');
-Page({data:{order:null,error:'',claimMessage:''},onLoad(q){this.orderId=q.id||'';this.refresh();},refresh(){this.setData({order:ui.orderView(api.get(this.orderId))});if(!this.data.order)this.setData({error:'找不到演练订单，请从我的订单重新打开。'});},
+Page({data:{order:null,error:'',claimMessage:''},onLoad(q){this.orderId=q.id||'';this.refresh();},refresh(){this.setData({order:ui.orderView(api.get(this.orderId)),error:''});if(!this.data.order)this.setData({error:'找不到演练订单，请从我的订单重新打开。'});},
 claim(){try{const o=api.claim(this.orderId);this.setData({error:'',claimMessage:'演练领取成功，尝试 '+o.attempts+' 次；没有下载或安装软件。正式交付将在原电脑页面继续。'});this.refresh();}catch(e){ui.showError(this,e);}},
 refund(){wx.showModal({title:'演练退款',content:'撤销模拟订单领取资格，不发生真实资金变动。',success:r=>{if(r.confirm){try{api.refund(this.orderId);this.setData({claimMessage:''});this.refresh();}catch(e){ui.showError(this,e);}}}});},
 checkout(){wx.redirectTo({url:'/pages/checkout/index?id='+encodeURIComponent(this.orderId)});},orders(){wx.navigateTo({url:'/pages/orders/index'});},help(){wx.navigateTo({url:'/pages/help/index'});}});

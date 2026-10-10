@@ -44,9 +44,9 @@ POST /api/orders：检查有效资格、商品上架状态、权益和幂等键�
 
 ## 6. 验证结果与限制
 
-Node 业务与服务测试 7 项通过；JS 语法、JSON、页面文件、事件绑定及 WXML XML 结构检查通过。结构检查不能替代微信 WXML/WXSS 编译。
+Node 业务、服务与页面操作测试 12 项通过；JS 语法、JSON、页面文件、事件绑定及 WXML XML 结构检查通过。结构检查不能替代微信 WXML/WXSS 编译。
 
-微信开发者工具编译：NOT_RUN。Android/iOS 真机预览与视频加载：NOT_RUN。真实登录、跨电脑关联、支付、退款、上线审核：NOT_IMPLEMENTED。桌面控制工具因当前工作目录兼容错误无法连接。
+安装包自带 WXML/WXSS 原生编译器：PASS。完整 IDE 与模拟器调试：NOT_RUN（服务端口关闭）。Android/iOS 真机预览与视频加载：NOT_RUN。真实登录、跨电脑关联、支付、退款、上线审核：NOT_IMPLEMENTED。桌面控制工具因当前工作目录兼容错误无法连接。
 
 ## 7. 待确认与上线门槛
 
@@ -61,4 +61,4 @@ AppID 已绑定 wx9e5937d752f2125f；小程序显示名称待确认，不需要 
 用户文件：Hermes_CN_MiniProgram_Paid_Installation_Plan_v1.0.docx。微信官方快速开始：https://developers.weixin.qq.com/miniprogram/dev/framework/quickstart/ 。
 
 ## 本机导入状态
-微信开发者工具 CLI open 已尝试，返回 IDE service port disabled。项目未自动打开；可手动导入 Windows 输出目录。尚未执行微信编译或实机预览。
+微信开发者工具 CLI open 已尝试，返回 IDE service port disabled。项目未自动打开；可手动导入 Windows 输出目录。已通过安装包自带原生模板与样式编译器；尚未执行完整 IDE 构建、模拟器点击或实机预览。
