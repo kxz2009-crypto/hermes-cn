@@ -1,7 +1,7 @@
 # Hermes CN 小程序本地演练首版
 
 微信开发者工具导入本目录，选择小程序项目，不使用云开发。
-当前 AppID 为 touristappid；取得 Hermes 新 AppID 后修改 project.config.json。
+已绑定用户提供的 Hermes AppID：wx9e5937d752f2125f。
 项目独立于企智文献，未复制它的账号、签名或商品配置。
 
 ## 演练
@@ -28,4 +28,4 @@ node --test tests/domain.test.js
 本次未上传审核、未提交备案、未上线、未真实收款。
 
 ## 本机导入限制
-自动导入已尝试，开发者工具返回 IDE service port disabled。可在工具中手动导入本目录，不必为手动导入开启命令行端口。AppID 仍为测试配置，正式绑定待提供。
+自动导入已尝试，开发者工具返回 IDE service port disabled。可在工具中手动导入本目录，不必为手动导入开启命令行端口。AppID 已绑定 wx9e5937d752f2125f，真实支付仍未启用。

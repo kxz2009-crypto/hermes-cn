@@ -12,9 +12,9 @@
 
 权威源码：/home/gao20/projects/hermes-cn/apps/mini-program。Windows 导入副本：本 outputs 目录下的 hermes-cn-mini-program。
 
-微信开发者工具 → 导入项目 → 选择 hermes-cn-mini-program 目录 → 小程序 → 不使用云开发。默认 AppID 为 touristappid；正式 AppID 待用户提供，再修改 project.config.json。
+微信开发者工具 → 导入项目 → 选择 hermes-cn-mini-program 目录 → 小程序 → 不使用云开发。已绑定用户提供的 Hermes AppID：wx9e5937d752f2125f。
 
-无需 npm 安装。config/env.js 的 mode 为 demo，真实收费保持关闭。导入后正常编译并检查七个页面；如测试号导入受限，使用已注册的 Hermes AppID。
+无需 npm 安装。config/env.js 的 mode 为 demo，真实收费保持关闭。导入后正常编译并检查七个页面；本项目使用已注册的 Hermes AppID。
 
 ## 3. 演练流程
 
@@ -50,7 +50,7 @@ Node 业务与服务测试 7 项通过；JS 语法、JSON、页面文件、事�
 
 ## 7. 待确认与上线门槛
 
-需要新小程序 AppID 与名称，不需要 AppSecret。备案申请状态和支付权限以平台实际结果为准；旧企智文献成功支付不能证明新账号已具备同等能力。
+AppID 已绑定 wx9e5937d752f2125f；小程序显示名称待确认，不需要 AppSecret。备案申请状态和支付权限以平台实际结果为准；旧企智文献成功支付不能证明新账号已具备同等能力。
 
 领取期限 30 天仍是建议值；一单换机、退款条件和争议渠道需确定。上架前完成真实检查/关联、服务端授权、Android/iOS 低金额收款到领取及退款验收。
 
