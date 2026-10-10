@@ -1,0 +1,5 @@
+const api=require('../../services/install'),ui=require('../../utils/ui');
+Page({data:{order:null,agreed:false,busy:false,error:''},onLoad(q){this.orderId=q.id||'';this.refresh();},refresh(){this.setData({order:ui.orderView(api.get(this.orderId))});if(!this.data.order)this.setData({error:'订单不存在，请先完成检查。'});},
+agree(e){this.setData({agreed:e.detail.value.includes('accepted')});},terms(){wx.navigateTo({url:'/pages/terms/index'});},
+pay(){if(!this.data.agreed||this.data.busy)return;this.setData({busy:true,error:''});try{api.pay(this.orderId);wx.redirectTo({url:'/pages/result/index?id='+encodeURIComponent(this.orderId)});}catch(e){ui.showError(this,e);}finally{this.setData({busy:false});}},
+cancel(){api.cancel(this.orderId);this.refresh();},result(){wx.redirectTo({url:'/pages/result/index?id='+encodeURIComponent(this.orderId)});}});

@@ -1,0 +1,3 @@
+<view class="container"><view class="demo">本地演练版 · 不产生真实付款或安装权益</view>
+<view class="title">我的订单</view><view class="subtitle">本机演练记录。正式版将按微信账号查询服务器订单。</view><view wx:if="{{!orders.length}}" class="card empty">还没有演练订单。先完成电脑检查流程。</view><view wx:for="{{orders}}" wx:key="id" class="card"><view class="heading">{{item.product.name}}</view><view class="row">¥{{item.price}} · {{item.paymentText}}</view><view class="small">{{item.id}} · {{item.time}}</view><button data-id="{{item.id}}" bindtap="open">查看订单</button><button wx:if="{{item.paymentStatus === 'paid' || item.paymentStatus === 'pending'}}" data-id="{{item.id}}" bindtap="restore">演练关闭页面后恢复关联</button></view><view wx:if="{{error}}" class="error">{{error}}</view><button class="primary" bindtap="check">继续免费检查</button>
+</view>

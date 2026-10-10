@@ -1,0 +1,19 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/check/index",
+    "pages/checkout/index",
+    "pages/result/index",
+    "pages/orders/index",
+    "pages/help/index",
+    "pages/terms/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "Hermes CN",
+    "navigationBarBackgroundColor": "#f7f8fc",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7f8fc"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

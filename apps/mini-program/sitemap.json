@@ -1,0 +1,9 @@
+{
+  "desc": "本地演练项目，尚未发布",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

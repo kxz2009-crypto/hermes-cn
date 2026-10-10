@@ -1,0 +1,7 @@
+<view class="container"><view class="demo">本地演练版 · 不产生真实付款或安装权益</view>
+<view class="eyebrow">HERMES CN / 自助安装</view><view class="title">让办公助手 · 从安装开始</view><view class="subtitle">先在电脑免费检查环境，再用手机确认购买，回到电脑继续安装。</view>
+<view class="hero"><view class="pill">一期安装包 · 固定版本</view><view class="price">¥9.90</view><view class="small">一次性购买 · 模型调用费用另计</view><button class="primary" bindtap="start">开始免费检查</button></view>
+<view class="card"><view class="heading">你会获得什么</view><view class="row">指定版本安装入口与完整安装教程</view><view class="row">模型配置说明与常见问题自查</view><view class="row">失败可重试，不因下载中断重复收费</view><view class="small">自助操作，不包含人工安装或远程协助。领取期限、换机和退款规则尚待确定，当前不开放真实购买。</view></view>
+<view class="card"><view class="heading">安装过程，先看一遍</view><video src="https://hermes.localvram.cn/media/installvideo.mp4" poster="https://hermes.localvram.cn/media/installvideo-poster.jpg" controls show-center-play-btn/><view class="small">视频加载需网络支持，步骤以电脑网站安装指南为准。</view></view>
+<button bindtap="orders">我的订单</button><button bindtap="help">问题自查</button><button bindtap="terms">服务范围与说明</button>
+</view>

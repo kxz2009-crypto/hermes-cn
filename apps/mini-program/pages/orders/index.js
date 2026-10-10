@@ -1,0 +1,2 @@
+const api=require('../../services/install'),ui=require('../../utils/ui');
+Page({data:{orders:[],error:''},onShow(){this.setData({orders:api.load().orders.map(ui.orderView)});},open(e){wx.navigateTo({url:'/pages/result/index?id='+encodeURIComponent(e.currentTarget.dataset.id)});},restore(e){try{api.restore(e.currentTarget.dataset.id);wx.navigateTo({url:'/pages/check/index'});}catch(x){ui.showError(this,x);}},check(){wx.navigateTo({url:'/pages/check/index'});}});
