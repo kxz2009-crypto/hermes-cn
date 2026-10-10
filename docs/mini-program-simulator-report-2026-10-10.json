@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "label": "首页可渲染、显示9.90元与演练说明",
+      "status": "PASS"
+    },
+    {
+      "label": "点击首页进入检查页",
+      "status": "PASS"
+    },
+    {
+      "label": "检测场景 BLOCK 阻止下单",
+      "status": "PASS"
+    },
+    {
+      "label": "检测场景 UNKNOWN 阻止下单",
+      "status": "PASS"
+    },
+    {
+      "label": "通过检查并关联创建订单",
+      "status": "PASS"
+    },
+    {
+      "label": "未勾选说明时付款按钮被禁用",
+      "status": "PASS"
+    },
+    {
+      "label": "模拟付款后进入结果页",
+      "status": "PASS"
+    },
+    {
+      "label": "领取重试保持原订单权益",
+      "status": "PASS"
+    },
+    {
+      "label": "订单恢复沿用原订单",
+      "status": "PASS"
+    },
+    {
+      "label": "错误关联码不展示旧通过结果",
+      "status": "PASS"
+    },
+    {
+      "label": "检查过期拒绝创建订单",
+      "status": "PASS"
+    },
+    {
+      "label": "help 页面可渲染",
+      "status": "PASS"
+    },
+    {
+      "label": "terms 页面可渲染",
+      "status": "PASS"
+    },
+    {
+      "label": "orders 页面可渲染",
+      "status": "PASS"
+    }
+  ],
+  "exceptions": [],
+  "consoleErrors": [],
+  "status": "PASS"
+}

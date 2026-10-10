@@ -1,4 +1,4 @@
-# 微信小程序代码调试记录 · 2026-10-10
+# 微信小程序调试记录 · 2026-10-10
 
 AppID：wx9e5937d752f2125f。当前为本地演练，真实付款未启用。
 
@@ -8,11 +8,39 @@ AppID：wx9e5937d752f2125f。当前为本地演练，真实付款未启用。
 
 ## 已验证
 - 12 项 Node 业务、服务及页面操作回归测试通过。
-- 微信开发者工具安装包自带 wcc.exe：七个 WXML 页面编译退出码 0，无 stderr。
+- 微信开发者工具自带 wcc.exe：七个 WXML 页面编译退出码 0，无 stderr。
 - 自带 wcsc.exe：app.wxss 与七页样式编译退出码 0，无 stderr。
-- 原源码、用户已导入的 outputs/hermes-cn-mini-program 和交付 ZIP 已同步；保留开发者工具本机 private 配置。
+- 用户开启服务端口后，官方 CLI auto 成功打开已导入项目；通过官方 miniprogram-automator 0.12.1 连接 ws://127.0.0.1:9420。
+- 模拟器 14 项检查全部 PASS；测试期间 exception 和 console error 记录均为空。
+- 首页、检查、确认订单、结果、订单列表、帮助、服务说明七页均在模拟器实际运行。
+- 首页和结果页截图已人工检查，主要文字与操作按钮正常显示。
+- 原源码、用户已导入的项目和交付 ZIP 已同步；保留开发者工具本机 private 配置。
 
-## 尚未验证
-完整 IDE 构建、模拟器点击与布局、视频播放、Android/iOS 真机：未执行。
-官方 CLI auto 因 IDE service port disabled 无法连接；桌面控制工具仍报告 sandboxCwd 兼容错误。
-编译器级通过不能替代完整 IDE 与设备验收。等待用户开启服务端口后继续模拟器调试。
+## 模拟器覆盖
+- 首页可渲染、显示9.90元与演练说明：PASS
+- 点击首页进入检查页：PASS
+- 检测场景 BLOCK 阻止下单：PASS
+- 检测场景 UNKNOWN 阻止下单：PASS
+- 通过检查并关联创建订单：PASS
+- 未勾选说明时付款按钮被禁用：PASS
+- 模拟付款后进入结果页：PASS
+- 领取重试保持原订单权益：PASS
+- 订单恢复沿用原订单：PASS
+- 错误关联码不展示旧通过结果：PASS
+- 检查过期拒绝创建订单：PASS
+- help 页面可渲染：PASS
+- terms 页面可渲染：PASS
+- orders 页面可渲染：PASS
+
+## 测试方法与限制
+- 使用隔离的本地演练存储；测试结束尝试恢复原存储并回到首页。
+- 首页、确认关联、付款、领取、恢复关联等按钮通过自动化 tap 验证。
+- 原生 checkbox 使用组件 change 事件验证勾选逻辑；模拟器 tap 未触发该组件 change，未将其认定为产品缺陷。物理点击手感仍需人工/真机确认。
+- 检查场景通过模拟器运行时页面方法设置，BLOCK、UNKNOWN 与过期拦截均核验页面状态及本地订单数据。
+- 订单与支付仍使用本地演练数据，未调用真实微信支付、登录或生产订单后端。
+- 视频封面已显示；视频完整播放及 Android/iOS 真机仍为 NOT_RUN。
+- 不代表已完成支付资质、备案、生产后端、电脑下载联调或正式发布验收。
+
+## 证据
+机器报告：docs/mini-program-simulator-report-2026-10-10.json。
+用户交付目录保存 mini-program-home.png、mini-program-result.png 和 mini-program-simulator-report.json。
