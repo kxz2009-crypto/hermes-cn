@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes CN virtual payment service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes-payments
+Group=hermes-payments
+WorkingDirectory=/opt/hermes-payments
+EnvironmentFile=/etc/hermes-payments.env
+ExecStart=/usr/bin/python3 /opt/hermes-payments/payment.py
+Restart=on-failure
+UMask=0077
+StateDirectory=hermes-payments
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hermes-payments
+
+[Install]
+WantedBy=multi-user.target

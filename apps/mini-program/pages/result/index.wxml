@@ -1,3 +1,11 @@
-<view class="container"><view class="demo">本地演练版 · 不产生真实付款或安装权益</view>
-<view class="title">订单与安装 · 是两件事</view><view wx:if="{{order}}" class="card"><view class="heading">{{order.paymentText}}</view><view class="row">交付状态：{{order.deliveryText}}</view><view class="row">订单编号：{{order.id}}</view><view class="row">安装版本：{{order.product.version}}</view><view class="small">演练付款成功不代表电脑已经安装成功。</view><button class="primary" wx:if="{{order.paymentStatus === 'paid'}}" bindtap="claim">演练继续安装</button><button wx:if="{{order.paymentStatus === 'paid'}}" bindtap="refund">演练退款并撤销领取权益</button><button wx:if="{{order.paymentStatus === 'pending'}}" bindtap="checkout">返回确认订单</button></view><view wx:if="{{claimMessage}}" class="success">{{claimMessage}}</view><view wx:if="{{error}}" class="error">{{error}}</view><button bindtap="refresh">重新查询订单</button><button bindtap="orders">查看我的订单</button><button bindtap="help">安装问题自查</button>
-</view>
+<view class="container"><view wx:if="{{mode==='demo'}}" class="demo">本地演练版 · 不产生真实付款或安装权益</view>
+<view class="title">订单与安装结果</view>
+<view wx:if="{{order}}" class="card"><view class="heading">{{order.paymentText}}</view><view class="row">交付状态：{{order.deliveryText}}</view><view class="row" wx:if="{{order.refundText}}">{{order.refundText}}</view><view class="row">订单编号：{{order.id}}</view><view class="row">安装版本：{{order.product.version}}</view>
+<view class="small">付款确认后请回原电脑继续安装，无需再次扫码。付款成功不代表电脑已经安装完成。</view>
+<button class="primary" wx:if="{{order.canClaim}}" disabled="{{busy}}" bindtap="claim">{{mode==='demo'?'演练继续安装':'查看安装进度指引'}}</button>
+<view wx:if="{{order.canRefund && (mode==='demo' || order.platform!=='ios')}}"><input wx:if="{{mode!=='demo'}}" class="input" placeholder="请填写退款原因（最多200字）" maxlength="200" value="{{refundReason}}" bindinput="reason"/><button disabled="{{busy}}" bindtap="refund">{{mode==='demo'?'演练退款并撤销领取权益':'申请退款'}}</button></view>
+<button wx:if="{{mode!=='demo' && order.canRefund && order.platform==='ios'}}" bindtap="appleRefund">Apple 订单退款指引</button>
+<view wx:if="{{order.refundStatus==='requested' || order.refundStatus==='processing'}}" class="small">申请已记录。平台确认退款成功后才会显示“已退款”，你可以稍后重新查询。</view>
+<button wx:if="{{order.paymentStatus==='pending'}}" bindtap="checkout">返回确认订单</button></view>
+<view wx:if="{{claimMessage}}" class="success">{{claimMessage}}</view><view wx:if="{{error}}" class="error">{{error}}</view>
+<button disabled="{{busy}}" bindtap="refresh">重新查询订单</button><button bindtap="orders">查看我的订单</button><button bindtap="help">安装问题自查</button></view>

@@ -1,3 +1,6 @@
+## 2026-10-11 虚拟支付候选
+新增生产 API adapter 与独立 apps/payment-server，OfferID 1450674694。默认仍为 demo；密钥配置、服务部署和真实支付退款待联调。详见 docs/mini-program-virtual-payment-2026-10-11.md。
+
 # Hermes CN 小程序本地演练首版
 
 微信开发者工具导入本目录，选择小程序项目，不使用云开发。

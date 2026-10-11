@@ -4,7 +4,7 @@ function api(mode='demo'){
  let stored;
  const wx={getStorageSync:()=>stored?JSON.parse(JSON.stringify(stored)):undefined,setStorageSync:(k,s)=>{stored=JSON.parse(JSON.stringify(s));}};
  const sandbox={module:{exports:{}},Date,Math,wx,require:name=>name==='../config/env'?{mode}:require('../services/domain')};
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../services/install.js'),'utf8'),sandbox);
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../services/demo.js'),'utf8'),sandbox);
  return sandbox.module.exports;
 }
 test('重扫与页面恢复沿用原订单，退款后不可领取',()=>{

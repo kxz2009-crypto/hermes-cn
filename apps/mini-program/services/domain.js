@@ -1,6 +1,6 @@
 
 const RULE_VERSION='miniapp-demo-v1';
-const PRODUCT=Object.freeze({id:'hermes_install_990',name:'Hermes CN 办公助手自助安装包',priceFen:990,version:'3861473',rulesVersion:'draft-v1',claimDays:null});
+const PRODUCT=Object.freeze({id:'hermes_install_990',name:'Hermes CN 自助安装包',priceFen:990,version:'3861473',rulesVersion:'draft-v1',claimDays:null});
 function error(code,message){const e=new Error(message);e.code=code;return e;}
 function validateCheck(c,now){
  if(!c||c.status!=='PASS')throw error('CHECK_NOT_PASS','电脑检查未通过或尚未完成，请先重新检查。');
