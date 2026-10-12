@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode, urlparse, parse_qs
 from xml.etree import ElementTree
+from aes_callbacks import decrypt_callback, CallbackCryptoError
 
 APP_ID = "wx9e5937d752f2125f"
 PRODUCT = {"id": "hermes_install_990", "name": "Hermes CN 自助安装包",
@@ -364,6 +365,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store"); self.send_header("Content-Length", str(len(raw)))
         self.end_headers(); self.wfile.write(raw)
 
+    def _read_event_body(self, query):
+        # Returns the raw event body. Plain mode body is passed through;
+        # safe mode decrypts <Encrypt> with EncodingAESKey. The reply format
+        # later mirrors the decrypted shape (JSON event -> JSON, XML -> XML).
+        length=int(self.headers.get("Content-Length","0"))
+        require(0<length<=16384,"INVALID_BODY","回调请求格式不正确。")
+        raw_body=self.rfile.read(length)
+        if query.get("encrypt_type",[""])[0]!="aes":
+            return raw_body
+        require(raw_body.lstrip().startswith(b"{"),"INVALID_XML","不支持的消息格式。")
+        require(b"<!DOCTYPE" not in raw_body.upper(),"INVALID_XML","不支持的消息格式。")
+        envelope=json.loads(raw_body)
+        encrypt=envelope.get("Encrypt") if isinstance(envelope,dict) else None
+        require(isinstance(encrypt,str) and encrypt,"CALLBACK_ENCRYPT_MISSING","加密回调缺少密文字段。")
+        aes_key=os.environ.get("HERMES_CALLBACK_AES_KEY","")
+        require(aes_key,"CALLBACK_AESKEY_UNCONFIGURED","服务端未配置加密回调密钥。",503)
+        # Failure here fails closed: no success ack is generated for a body
+        # that cannot be authenticated as addressed to this AppId.
+        return decrypt_callback(encrypt, aes_key, APP_ID)
+
     def callback(self, method):
         query=parse_qs(urlparse(self.path).query)
         token=os.environ.get("HERMES_CALLBACK_TOKEN","")
@@ -376,10 +397,8 @@ class Handler(BaseHTTPRequestHandler):
         if method=="GET":
             raw=query.get("echostr",[""])[0].encode();content_type="text/plain"
         else:
-            require(query.get("encrypt_type",[""])[0]!="aes","CALLBACK_ENCRYPTION_UNSUPPORTED","加密回调需单独配置，不能直接接收。",501)
-            length=int(self.headers.get("Content-Length","0"))
-            require(0<length<=16384,"INVALID_BODY","回调请求格式不正确。")
-            raw_body=self.rfile.read(length)
+            raw_body=self._read_event_body(query)
+            if isinstance(raw_body,str):raw_body=raw_body.encode()
             if raw_body.lstrip().startswith(b"{"):event=json.loads(raw_body)
             else:
                 require(b"<!DOCTYPE" not in raw_body.upper(),"INVALID_XML","不支持的消息格式。")

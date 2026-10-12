@@ -1,4 +1,4 @@
-import hashlib, json, os, tempfile, threading, time, unittest
+import hashlib, json, os, struct, sys, tempfile, threading, time, unittest
 from urllib.parse import urlencode
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -216,6 +216,45 @@ class HTTPBoundaries(unittest.TestCase):
         try:
             with urlopen(req,timeout=3) as res:return res.status,json.load(res)
         except HTTPError as e:return e.code,json.load(e)
+    def aes_encrypt(self,encoding_aes_key,message,receive_id="wx9e5937d752f2125f"):
+        # Mirrors WeChat's safe-mode envelope: 16B random || 4B len || msg || receiveid, PKCS7.
+        import base64,struct
+        sys.path.insert(0,".")
+        from aes_callbacks import _expand,_SBOX,_gmul
+        def enc_block(w,nr,block):
+            st=[list(block[4*c:4*c+4]) for c in range(4)]
+            def ark(r):
+                for c in range(4):
+                    for j in range(4):st[c][j]^=w[r*4+c][j]
+            def shift():
+                for r in range(1,4):
+                    col=[st[(c+r)%4][r] for c in range(4)]
+                    for c in range(4):st[c][r]=col[c]
+            def sub():
+                for c in range(4):
+                    for j in range(4):st[c][j]=_SBOX[st[c][j]]
+            def mix():
+                for c in range(4):
+                    a=st[c]
+                    st[c]=[_gmul(a[0],2)^_gmul(a[1],3)^_gmul(a[2],1)^_gmul(a[3],1),
+                           _gmul(a[0],1)^_gmul(a[1],2)^_gmul(a[2],3)^_gmul(a[3],1),
+                           _gmul(a[0],1)^_gmul(a[1],1)^_gmul(a[2],2)^_gmul(a[3],3),
+                           _gmul(a[0],3)^_gmul(a[1],1)^_gmul(a[2],1)^_gmul(a[3],2)]
+            ark(0)
+            for r in range(1,nr):sub();shift();mix();ark(r)
+            sub();shift();ark(nr)
+            return bytes(b for c in st for b in c)
+        import os as _os
+        key=base64.b64decode(encoding_aes_key)
+        body=_os.urandom(16)+struct.pack(">I",len(message))+message+receive_id.encode()
+        pad=16-len(body)%16
+        body+=bytes([pad])*pad
+        w,nr=_expand(key)
+        out,prev=b"",key[:16]
+        for i in range(0,len(body),16):
+            cb=enc_block(w,nr,bytes(x^y for x,y in zip(body[i:i+16],prev)))
+            out+=cb;prev=cb
+        return base64.b64encode(out).decode()
     def test_unauthed_orders_rejected_and_admin_separate(self):
         status,data=self.call("/orders");self.assertEqual(status,401)
         token=self.call("/auth/login",{"code":"alice"})[1]["token"]
@@ -256,7 +295,9 @@ class HTTPBoundaries(unittest.TestCase):
         sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
         q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
         with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test"}):
-            self.assertEqual(self.call("/wechat/events?"+q,{"Encrypt":"opaque"})[0],501)
+            os.environ.pop("HERMES_CALLBACK_AES_KEY",None)
+            # Invalid cipher with no AES key configured: 503, never a success ack.
+            self.assertEqual(self.call("/wechat/events?"+q,{"Encrypt":"opaque"})[0],503)
 
     def test_valid_delivery_and_refund_callbacks_confirm_provider_state(self):
         o=self.fixture_order()
@@ -294,5 +335,93 @@ class HTTPBoundaries(unittest.TestCase):
         with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test"}):
             with urlopen(req,timeout=3) as res:self.assertEqual(json.load(res)["ErrCode"],0)
         self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"refunded")
+
+    def test_aes_safe_mode_delivery_callback_confirms_via_provider(self):
+        o=self.fixture_order()
+        self.app.p.status=2
+        aes_key="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ="  # 43+"=", decodes to 32 bytes
+        inner=json.dumps({"Event":"xpay_goods_deliver_notify","OutTradeNo":o["id"],
+                          "MchOrderId":o["id"],"OpenId":"alice","paid":True}).encode()
+        stamp=str(int(time.time()));nonce="aes"
+        sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
+        q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
+        raw=json.dumps({"Encrypt":self.aes_encrypt(aes_key,inner)}).encode()
+        req=Request("http://127.0.0.1:"+str(self.server.server_port)+"/wechat/events?"+q,data=raw)
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test",
+                                    "HERMES_CALLBACK_AES_KEY":aes_key}):
+            with urlopen(req,timeout=3) as res:
+                self.assertEqual(res.status,200);self.assertEqual(json.load(res)["ErrCode"],0)
+        # Payment state came from provider query (status=2), never from the encrypted fields.
+        self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"paid")
+        self.assertEqual(len(self.app.p.deliveries),1)
+
+    def test_aes_safe_mode_refund_callback_confirms_via_provider(self):
+        o=self.fixture_order();u=self.app.auth(self.app.login("alice")["token"])
+        self.app.p.status=2;self.app.get(u,o["id"],True);self.app.p.refund_status=8
+        aes_key="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ="
+        inner=json.dumps({"Event":"xpay_refund_notify","MchOrderId":o["id"],
+                          "MchRefundId":"r123456789","OpenId":"alice",
+                          "FromUserName":"wechat_official"}).encode()
+        stamp=str(int(time.time()));nonce="aesr"
+        sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
+        q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
+        raw=json.dumps({"Encrypt":self.aes_encrypt(aes_key,inner)}).encode()
+        req=Request("http://127.0.0.1:"+str(self.server.server_port)+"/wechat/events?"+q,data=raw)
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test",
+                                    "HERMES_CALLBACK_AES_KEY":aes_key}):
+            with urlopen(req,timeout=3) as res:
+                self.assertEqual(json.load(res)["ErrCode"],0)
+        self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"refunded")
+
+    def test_aes_wrong_receiveid_fails_closed(self):
+        o=self.fixture_order()
+        aes_key="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ="
+        inner=json.dumps({"Event":"xpay_goods_deliver_notify","OutTradeNo":o["id"],"OpenId":"alice"}).encode()
+        stamp=str(int(time.time()));nonce="tamper"
+        sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
+        q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
+        raw=json.dumps({"Encrypt":self.aes_encrypt(aes_key,inner,receive_id="wxother0000000000")}).encode()
+        req=Request("http://127.0.0.1:"+str(self.server.server_port)+"/wechat/events?"+q,data=raw)
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test",
+                                    "HERMES_CALLBACK_AES_KEY":aes_key}):
+            with self.assertRaises(HTTPError) as caught:urlopen(req,timeout=3)
+        self.assertEqual(caught.exception.code,500)
+        self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"pending")
+
+    def test_aes_unconfigured_key_returns_503_not_success(self):
+        o=self.fixture_order()
+        aes_key="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ="
+        inner=json.dumps({"Event":"xpay_goods_deliver_notify","OutTradeNo":o["id"],"OpenId":"alice"}).encode()
+        stamp=str(int(time.time()));nonce="nocfg"
+        sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
+        q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
+        raw=json.dumps({"Encrypt":self.aes_encrypt(aes_key,inner)}).encode()
+        req=Request("http://127.0.0.1:"+str(self.server.server_port)+"/wechat/events?"+q,data=raw)
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test"},
+                        clear=False):
+            os.environ.pop("HERMES_CALLBACK_AES_KEY",None)
+            with self.assertRaises(HTTPError) as caught:urlopen(req,timeout=3)
+        self.assertEqual(caught.exception.code,503)
+        self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"pending")
+
+    def test_aes_garbage_cipher_fails_closed(self):
+        o=self.fixture_order()
+        aes_key="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ="
+        stamp=str(int(time.time()));nonce="junk"
+        sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
+        q=urlencode({"timestamp":stamp,"nonce":nonce,"signature":sig,"encrypt_type":"aes"})
+        raw=json.dumps({"Encrypt":"not-a-valid-cipher"}).encode()
+        req=Request("http://127.0.0.1:"+str(self.server.server_port)+"/wechat/events?"+q,data=raw)
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test",
+                                    "HERMES_CALLBACK_AES_KEY":aes_key}):
+            with self.assertRaises(HTTPError) as caught:urlopen(req,timeout=3)
+        self.assertEqual(caught.exception.code,500)
+        self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],"pending")
+
+    def test_aes_key_audit_encoding_aes_key_decode_length(self):
+        # 43 base64 chars + "=" must decode to exactly 32 bytes for AES-256.
+        from aes_callbacks import decrypt_callback, CallbackCryptoError
+        with self.assertRaises(CallbackCryptoError):
+            decrypt_callback("AAAA","shortkey","wx9e5937d752f2125f")
 
 if __name__=="__main__":unittest.main()
