@@ -306,9 +306,10 @@ class Service:
         require(o["platform"] != "ios", "APPLE_REFUND", "此订单请通过 Apple 购买记录申请退款。")
         require(o["paymentStatus"] == "paid", "REFUND_UNAVAILABLE", "当前订单不能申请退款。")
         if o["refundStatus"] in ("requested", "processing"): return self.view(o)
-        require(isinstance(reason, str) and 1 <= len(reason.strip()) <= 200, "REFUND_REASON", "请填写退款原因。")
+        clean = reason.strip() if isinstance(reason, str) else ""
+        require(len(clean) <= 200, "REFUND_REASON", "退款说明过长，请精简到200字以内。")
         o.pop("providerRefundId",None)
-        o.update(refundStatus="requested", refundReason=reason.strip(), refundId=uid("r"),
+        o.update(refundStatus="requested", refundReason=clean, refundId=uid("r"),
                  refundRequestedAt=self.now(), deliveryStatus="held")
         self.save(o); return self.view(o)
 
