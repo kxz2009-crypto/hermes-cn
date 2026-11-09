@@ -1,0 +1,114 @@
+{
+  "schema": "localvram-hermes-cn/unsigned-upgrade-inputs/1",
+  "release_id": "LV-HERMES-0230-FIRST-UPGRADE-20261109",
+  "state": "UNSIGNED_REVIEW_ONLY_NOT_INSTALLABLE",
+  "upstream": {
+    "tag": "v0.23.0",
+    "commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+    "requires_python": ">=3.11,<3.15",
+    "python_runtime_pin": "3.14",
+    "python_exact_build": "3.14.9+20261021",
+    "uv_version": "0.13.5",
+    "python_package_metadata_version": "0.0.0",
+    "version_authority": "Git tag and full commit; pyproject version may be a packaging placeholder"
+  },
+  "dependency_facts": {
+    "node_package_engines": {
+      "node": ">=26",
+      "npm": "<11.10.0 || >=11.17.0"
+    },
+    "scope_note": "Package engines are not proof every Python CLI path requires Node; Electron restrictions apply to Desktop."
+  },
+  "official_files": {
+    "pyproject.toml": {
+      "sha256": "b1531ab4807bc64441a3fe3f56d6c166dcf0074e3510e061a1377c4d05d3ca24",
+      "bytes": 46627
+    },
+    ".python-version": {
+      "sha256": "a876e0b10411037a012498b9fe18d9bc1df32ed8b722a13564dc944ddcfd9135",
+      "bytes": 5
+    },
+    "pm/lock.json": {
+      "sha256": "40b06778980ff8c50dcd97c0d9b39ba3eb4a7a242ea62eaeaaa9a90d68ea1a85",
+      "bytes": 33533
+    },
+    "uv.lock": {
+      "sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+      "bytes": 1250964
+    },
+    "package.json": {
+      "sha256": "304b9c1dcbbae8685bd9fca140b139428d9e554ebd6174cdfd45b83cbd093b59",
+      "bytes": 2786
+    },
+    "scripts/install.sh": {
+      "sha256": "abf338605dae6dd28d101673ac6aed7995c955745db46d47676bc591a7957209",
+      "bytes": 66864
+    },
+    "LICENSE": {
+      "sha256": "821556e6336796450ab852d375117b48a4887e71d255794fd6318d99982a5ab6",
+      "bytes": 1070
+    }
+  },
+  "platforms": {
+    "linux-x64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-unknown-linux-gnu.tar.gz",
+        "sha256": "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f",
+        "network_verified": false
+      },
+      "python": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.14.9+20261021-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        "sha256": "dfa4c5a40c47f338f41658017be550c72247c391e6bfb1fa4da03ebc8451abdf",
+        "network_verified": false
+      },
+      "actual_installation": "NOT_TESTED",
+      "customer_delivery": "NO-GO"
+    },
+    "darwin-arm64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-aarch64-apple-darwin.tar.gz",
+        "sha256": "743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73",
+        "network_verified": false
+      },
+      "python": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.14.9+20261021-aarch64-apple-darwin-install_only.tar.gz",
+        "sha256": "226d696642a8a53d03b4d5b255b1c319b1575a6d44bd723a953c9f507755e36a",
+        "network_verified": false
+      },
+      "actual_installation": "NOT_TESTED",
+      "customer_delivery": "NO-GO"
+    },
+    "darwin-x64": {
+      "uv": {
+        "url": "https://github.com/astral-sh/uv/releases/download/0.13.5/uv-x86_64-apple-darwin.tar.gz",
+        "sha256": "b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66",
+        "network_verified": false
+      },
+      "python": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261021/cpython-3.14.9+20261021-x86_64-apple-darwin-install_only.tar.gz",
+        "sha256": "600cf336dd007e7c72318214fd0708a56c555b516964175df4a748e4ff0487a2",
+        "network_verified": false
+      },
+      "actual_installation": "NOT_TESTED",
+      "customer_delivery": "NO-GO"
+    }
+  },
+  "source_distribution": {
+    "format_required": "git-bundle",
+    "approved_published_url": null,
+    "verified_download_sha256": null,
+    "status": "BLOCKED_UNPUBLISHED_V0230"
+  },
+  "legacy_assets_reusable_without_revalidation": false,
+  "required_integration": [
+    "Reconcile uncommitted R3 changes in their owning branch before merging.",
+    "Use new uv/Python exact builds, never inherit v0.22.2 download acceptance.",
+    "Measure a new Git bundle and approved CN delivery URL before descriptor signing.",
+    "Use isolated test signing; production signing requires separate approval.",
+    "Keep regional/platform real installation evidence separate."
+  ],
+  "production_actions": false,
+  "source_fallback": "NO_GITHUB_INSTALL_FALLBACK",
+  "signature": null,
+  "download_or_install_performed": false
+}
