@@ -3,7 +3,7 @@
 <view wx:if="{{order}}" class="card"><view class="heading">{{order.paymentText}}</view><view class="row">交付状态：{{order.deliveryText}}</view><view class="row" wx:if="{{order.refundText}}">{{order.refundText}}</view><view class="row">订单编号：{{order.id}}</view><view class="row">安装版本：{{order.product.version}}</view>
 <view class="small">付款确认后请回原电脑继续安装，无需再次扫码。付款成功不代表电脑已经安装完成。</view>
 <button class="primary" wx:if="{{order.canClaim}}" disabled="{{busy}}" bindtap="claim">{{mode==='demo'?'演练继续安装':'查看安装进度指引'}}</button>
-<view wx:if="{{order.canRefund && (mode==='demo' || order.platform!=='ios')}}"><input wx:if="{{mode!=='demo'}}" class="input" placeholder="请填写退款原因（最多200字）" maxlength="200" value="{{refundReason}}" bindinput="reason"/><button disabled="{{busy}}" bindtap="refund">{{mode==='demo'?'演练退款并撤销领取权益':'申请退款'}}</button></view>
+<view wx:if="{{order.canRefund && (mode==='demo' || order.platform!=='ios')}}"><input wx:if="{{mode!=='demo'}}" class="input" placeholder="退款说明（可不填写，最多200字）" maxlength="200" value="{{refundReason}}" bindinput="reason"/><button disabled="{{busy}}" bindtap="refund">{{mode==='demo'?'演练退款并撤销领取权益':'申请退款'}}</button></view>
 <button wx:if="{{mode!=='demo' && order.canRefund && order.platform==='ios'}}" bindtap="appleRefund">Apple 订单退款指引</button>
 <view wx:if="{{order.refundStatus==='requested' || order.refundStatus==='processing'}}" class="small">申请已记录。平台确认退款成功后才会显示“已退款”，你可以稍后重新查询。</view>
 <button wx:if="{{order.paymentStatus==='pending'}}" bindtap="checkout">返回确认订单</button></view>

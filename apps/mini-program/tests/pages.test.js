@@ -42,3 +42,12 @@ test('有效领取后的刷新清除旧错误提示',async()=>{
  const h=harness();h.api.session('DEMO-PASS');h.api.confirm();const o=h.api.order();h.api.pay(o.id);
  const p=await h.page('result',{id:o.id});p.setData({error:'旧错误'});await p.refresh();assert.equal(p.data.error,'');
 });
+
+test('正式退款页面允许空说明，仍等待服务端状态',async()=>{
+ let page;const calls=[];const api={mode:'production',refund:async(id,reason)=>{calls.push({id,reason});},get:async()=>({id:'h1',paymentStatus:'paid',refundStatus:'requested'})};
+ const ui={orderView:x=>x,showError:(p,e)=>p.setData({error:e.message})};
+ vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../pages/result/index.js'),'utf8'),{Page:x=>{page=x;},Promise,require:n=>n.includes('services/install')?api:ui,wx:{showModal:opts=>opts.success({confirm:true})}});
+ page.orderId='h1';page.data={...page.data};page.setData=function(x){Object.assign(this.data,x);};
+ await page.refund();assert.equal(calls.length,1);assert.equal(calls[0].reason,'');
+ assert.equal(page.data.order.paymentStatus,'paid');assert.equal(page.data.order.refundStatus,'requested');
+});

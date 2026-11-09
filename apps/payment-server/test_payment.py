@@ -72,6 +72,22 @@ class Payments(unittest.TestCase):
         self.assertEqual(a["paymentStatus"],"paid");self.assertEqual(a["refundStatus"],"requested")
         self.assertFalse(self.app.pc_status(self.pc["code"],self.pc["pcToken"])["canContinue"])
         with self.assertRaises(Failure):self.app.continue_install(self.user,self.o["id"])
+    def test_refund_reason_optional_and_retry_reuses_request(self):
+        self.paid()
+        first=self.app.request_refund(self.user,self.o["id"],"")
+        again=self.app.request_refund(self.user,self.o["id"],None)
+        self.assertEqual(first["refundId"],again["refundId"])
+        self.assertEqual(self.store.get("order",self.o["id"])["refundReason"],"")
+        self.assertEqual(again["paymentStatus"],"paid")
+        self.assertEqual(again["refundStatus"],"requested")
+
+    def test_refund_reason_too_long_does_not_hold_entitlement(self):
+        self.paid()
+        with self.assertRaises(Failure) as caught:
+            self.app.request_refund(self.user,self.o["id"],"x"*201)
+        self.assertEqual(caught.exception.code,"REFUND_REASON")
+        self.assertEqual(self.store.get("order",self.o["id"])["refundStatus"],"none")
+
     def test_refund_approval_idempotent_id_and_final_confirmation(self):
         self.paid();self.app.request_refund(self.user,self.o["id"],"test")
         a=self.app.approve_refund(self.o["id"]);b=self.app.approve_refund(self.o["id"])
@@ -314,6 +330,21 @@ class HTTPBoundaries(unittest.TestCase):
                     self.assertEqual(res.status,200);self.assertEqual(json.load(res)["ErrCode"],0)
                 self.assertEqual(self.store.get("order",o["id"])["paymentStatus"],status)
         self.assertEqual(len(self.app.p.deliveries),1)
+    def test_duplicate_and_delayed_callbacks_do_not_restore_refunded_entitlement(self):
+        o=self.fixture_order()
+        delivery={"Event":"xpay_goods_deliver_notify","OutTradeNo":o["id"],"OpenId":"alice"}
+        refund={"Event":"xpay_refund_notify","MchOrderId":o["id"],"OpenId":"alice"}
+        with patch.dict(os.environ,{"HERMES_CALLBACK_TOKEN":"callback-test"}):
+            self.app.p.status=2
+            for _ in range(2):self.assertEqual(self.event(delivery)[0],200)
+            self.assertEqual(len(self.app.p.deliveries),1)
+            self.app.p.status=8
+            for _ in range(2):self.assertEqual(self.event(refund)[0],200)
+            self.event(delivery)  # Delayed valid payment notification cannot undo a refund.
+        saved=self.store.get("order",o["id"])
+        self.assertEqual((saved["paymentStatus"],saved["refundStatus"],saved["deliveryStatus"]),("refunded","succeeded","revoked"))
+        self.assertEqual(len(self.app.p.deliveries),1)
+
     def test_invalid_xml_does_not_crash_callback(self):
         stamp=str(int(time.time()));nonce="xml"
         sig=hashlib.sha1("".join(sorted(["callback-test",stamp,nonce])).encode()).hexdigest()
